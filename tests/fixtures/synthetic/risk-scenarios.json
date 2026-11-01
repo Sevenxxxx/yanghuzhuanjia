@@ -1,0 +1,17 @@
+[
+  {"id":"S01","text":"道路突然塌陷，仍在扩大。","domain":"pavement","expected":"attention"},
+  {"id":"S02","text":"去年路面塌陷，已有历史记录。","domain":"pavement","expected":"undetermined"},
+  {"id":"S03","text":"如果路面突然塌陷该如何整理资料？","domain":"pavement","expected":"undetermined"},
+  {"id":"S04","text":"目前没有继续扩大。","domain":"pavement","expected":"undetermined"},
+  {"id":"S05","text":"不清楚是否持续变形。","domain":"slope","expected":"undetermined"},
+  {"id":"S06","text":"边坡持续落石，影响通行。","domain":"slope","expected":"attention"},
+  {"id":"S07","text":"桥梁出现异常变形。","domain":"bridge","expected":"attention"},
+  {"id":"S08","text":"未见异常变形，也没有影响通行。","domain":"bridge","expected":"undetermined"},
+  {"id":"S09","text":"路面有裂缝，变化情况未知。","domain":"pavement","expected":"undetermined"},
+  {"id":"S10","text":"没有路面塌陷，也没有继续扩大。","domain":"pavement","expected":"undetermined"},
+  {"id":"S11","text":"路面没有塌陷。","domain":"pavement","expected":"undetermined"},
+  {"id":"S12","text":"桥梁异常振动，仍在发展。","domain":"bridge","expected":"attention"},
+  {"id":"S13","text":"边坡仍在落石。","domain":"slope","expected":"attention"},
+  {"id":"S14","text":"没提到继续扩大，不知道是否影响通行。","domain":"pavement","expected":"undetermined"},
+  {"id":"S15","text":"道路塌陷，没继续扩大。","domain":"pavement","expected":"attention"}
+]

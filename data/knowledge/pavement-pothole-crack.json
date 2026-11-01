@@ -1,0 +1,56 @@
+{
+  "id": "pavement-pothole-crack",
+  "domain": "pavement",
+  "title": "坑槽裂缝与反复破损调查提纲",
+  "review_status": "draft_pending_professional_review",
+  "version": "0.1.3",
+  "analysis_profile": "pavement-distress-v1",
+  "scope": "非沉陷主导的路面病害；混有沉陷等异常时另核隐蔽问题，不凭外观认定层位",
+  "output_guidance": "路面类型、分布与层位未知情况分别记录；不默认选用沉陷模板。详见领域分析指引。",
+  "questions": [
+    {
+      "field": "facility",
+      "purpose": "明确路面类型及适用调查对象"
+    },
+    {
+      "field": "location",
+      "purpose": "核对病害与接缝、轮迹、旧修补及设施的位置关系"
+    },
+    {
+      "field": "progression",
+      "purpose": "区分新出现、反复破损及变化未知"
+    }
+  ],
+  "candidate_directions": [
+    {
+      "label": "表面材料或修补界面问题待查",
+      "support_to_seek": "已有路面类型、分布、维修记录和照片",
+      "counter_to_seek": "深层或支撑异常的调查证据",
+      "next_check": "先比对位置与维修记录，外观不能证明止于面层"
+    },
+    {
+      "label": "水与排水异常参与待查",
+      "support_to_seek": "水路及现象出现的时空关系",
+      "counter_to_seek": "调查不支持相应水路关联",
+      "next_check": "核对已有排水与渗漏记录，不仅因雨后就确定原因"
+    },
+    {
+      "label": "结构层或支撑状态变化待查",
+      "support_to_seek": "反复破损、沉陷等已有记录",
+      "counter_to_seek": "调查支持其他解释",
+      "next_check": "由相应专业结合结构及检测资料核定调查范围"
+    }
+  ],
+  "handling_directions": [
+    {
+      "approach": "按查明层位及机制研究修复方向",
+      "conditions": "相应调查与专业判断支持",
+      "limitations": "未查明前不指定罩面、开挖范围、材料或施工参数"
+    }
+  ],
+  "source_refs": [],
+  "known_gaps": [
+    "开发草稿，尚未经工程专业审核",
+    "未预置规范数值或已核验病因，咨询时另查适用规范"
+  ]
+}

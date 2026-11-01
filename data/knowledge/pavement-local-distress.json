@@ -1,0 +1,67 @@
+{
+  "id": "pavement-local-distress",
+  "domain": "pavement",
+  "title": "路面沉陷、塌陷与开裂的调查提纲",
+  "review_status": "draft_pending_professional_review",
+  "version": "0.1.1",
+  "analysis_profile": "pavement-subsidence-v1",
+  "output_guidance": "候选逐项说明事实联系、证据缺口和区分线索；下一步说明不同结果如何影响后续调查。仅为输出组织要求，不提升知识审核状态。",
+  "scope": "公路路面和路基相关异常的个人问诊；不作地下病因、承载力或施工方案结论",
+  "questions": [
+    {
+      "field": "progression",
+      "purpose": "先区分突发、历史与持续发展，不能因表面规模小排除风险"
+    },
+    {
+      "field": "location",
+      "purpose": "辨明车道、路肩、桥头、涵顶、检查井或管线邻近关系"
+    },
+    {
+      "field": "drainage",
+      "purpose": "区分是否存在可观察的水路异常及需要核查的设施"
+    }
+  ],
+  "candidate_directions": [
+    {
+      "label": "水相关冲刷或局部支撑流失待查",
+      "support_to_seek": "渗漏、排水异常、雨前雨后或管线记录",
+      "counter_to_seek": "无对应水路证据，调查发现其他解释",
+      "next_check": "调取排水及管线资料，安全条件下记录异常分布；专业人员决定是否检测隐蔽病害"
+    },
+    {
+      "label": "填筑或结构层状态变化待查",
+      "support_to_seek": "新旧填筑界面、反复维修、荷载与沉降时序",
+      "counter_to_seek": "实测证据表明原因位于其他部位",
+      "next_check": "比对施工和维修历史、变形范围及相关检测，不直接确定压实不足"
+    },
+    {
+      "label": "构造物过渡或其他隐蔽问题待查",
+      "support_to_seek": "与桥涵、井室、地下工程的空间关联",
+      "counter_to_seek": "位置和结构资料不支持该关联",
+      "next_check": "先明确设施与异常位置关系，再确定调查手段"
+    }
+  ],
+  "handling_directions": [
+    {
+      "approach": "针对查明的问题研究修复与排水等备选方向",
+      "conditions": "有调查证据并经相应专业人员确定适用性",
+      "limitations": "未查明隐蔽状态前，不给灌浆参数、开挖范围或最终结构方案"
+    }
+  ],
+  "source_refs": [
+    {
+      "book_id": "156-公路路基养护技术规范-JTG5150-2020",
+      "page": 15,
+      "clauses": [
+        "3.1.3",
+        "3.1.4"
+      ],
+      "checked": "2026-10-20 read",
+      "supports": "调查、评估与养护工作的组织；不独立证明上述具体病因"
+    }
+  ],
+  "known_gaps": [
+    "候选机理和检测建议为开发草稿，尚无工程专业审核",
+    "沥青路面规范部分 OCR 待原页核对，不预置数值阈值"
+  ]
+}

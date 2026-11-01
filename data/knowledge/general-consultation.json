@@ -1,0 +1,40 @@
+{
+  "id": "general-consultation",
+  "domain": "general",
+  "title": "跨领域咨询与专业交接",
+  "review_status": "draft_pending_professional_review",
+  "version": "0.1.0",
+  "scope": "未分类、超出知识覆盖、资料不足、用户不能安全补充的咨询",
+  "questions": [
+    {
+      "field": "facility",
+      "purpose": "确定设施与道路类别，不默认是桥面、桥头或桥下道路"
+    },
+    {
+      "field": "progression",
+      "purpose": "区别当前风险线索与历史／假设问题"
+    },
+    {
+      "field": "traffic",
+      "purpose": "明确对人员及通行的影响"
+    }
+  ],
+  "candidate_directions": [],
+  "handling_directions": [
+    {
+      "approach": "整理实际现象、时间线、证据和待解决问题，提出有目的的调查及交接",
+      "conditions": "只基于获准读取的资料",
+      "limitations": "不懂的领域不凑病因；不能只有一句找专家而不说明问题"
+    }
+  ],
+  "source_refs": [
+    {
+      "type": "product_requirement",
+      "reference": "项目产品文档 v1.2 第4章",
+      "supports": "咨询流程；不是工程机理或规范证据"
+    }
+  ],
+  "known_gaps": [
+    "通用流程不证明任何具体设施的技术状态"
+  ]
+}

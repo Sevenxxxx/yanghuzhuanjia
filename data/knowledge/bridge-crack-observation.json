@@ -1,0 +1,67 @@
+{
+  "id": "bridge-crack-observation",
+  "domain": "bridge",
+  "title": "桥涵裂缝、剥落及结构异常调查提纲",
+  "review_status": "draft_pending_professional_review",
+  "version": "0.1.3",
+  "scope": "桥梁与涵洞异常的资料准备；具体规范和方法须按设施及构件选取，桥梁条文不自动用于涵洞",
+  "questions": [
+    {
+      "field": "component",
+      "purpose": "先确认桥型、构件和缺损位置，区分主受力构件与附属部分"
+    },
+    {
+      "field": "progression",
+      "purpose": "辨明新旧、变化和伴随变形，保留观测来源"
+    },
+    {
+      "field": "history",
+      "purpose": "比对既有检查、维修和实测记录"
+    }
+  ],
+  "candidate_directions": [
+    {
+      "label": "材料或环境相关表面缺损待查",
+      "support_to_seek": "位置、分布、渗水、露筋及既有记录",
+      "counter_to_seek": "与受力部位、变形和荷载变化相关的证据",
+      "next_check": "整理缺损图和历史照片，专业人员确定检测项目"
+    },
+    {
+      "label": "受力或构造状态变化待查",
+      "support_to_seek": "构件位置、走向、发展和变形等实测资料",
+      "counter_to_seek": "资料无法建立对应关系或有其他更有力解释",
+      "next_check": "调取桥型、构造和检查资料；不能凭单图作承载能力判断"
+    },
+    {
+      "label": "支座、连接或基础等相关异常待查",
+      "support_to_seek": "构造物及相邻部位异常的对应关系",
+      "counter_to_seek": "调查未发现相应关联",
+      "next_check": "明确异常部位和检查途径，避免用户进入高处或水中自行检查"
+    }
+  ],
+  "handling_directions": [
+    {
+      "approach": "区分后续观察、专项检查和处治研究所需资料",
+      "conditions": "由相应专业人员依据调查与结构条件判断",
+      "limitations": "不输出正式技术评级、裂缝安全限值、加固定案或恢复通行指令"
+    }
+  ],
+  "source_refs": [
+    {
+      "book_id": "148-公路桥涵养护规范-JTG5120-2021",
+      "page": 14,
+      "clauses": [
+        "3.3.2"
+      ],
+      "checked": "2026-10-20 read; page requires visual verification before citing",
+      "supports": "明显缺损和异常应记录与上报；不支持具体裂缝病因",
+      "needs_visual": true
+    }
+  ],
+  "known_gaps": [
+    "未专业审阅；未核实具体桥型构件的检测及处治适用性",
+    "涵洞应另查相应规范章节，不沿用桥梁结论"
+  ],
+  "analysis_profile": "bridge-culvert-v1",
+  "output_guidance": "结合实际资料填写领域上下文；候选说明事实联系、缺口与区分线索；核查说明不同结果的下一步。未知明确保留，内容仍待专业审核。"
+}

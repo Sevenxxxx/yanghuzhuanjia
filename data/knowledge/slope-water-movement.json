@@ -1,0 +1,67 @@
+{
+  "id": "slope-water-movement",
+  "domain": "slope",
+  "title": "边坡掉块、变形与渗水调查提纲",
+  "review_status": "draft_pending_professional_review",
+  "version": "0.1.3",
+  "scope": "边坡与相关支挡、排水设施；结构类型和地质条件未确认时不套同一处治",
+  "questions": [
+    {
+      "field": "progression",
+      "purpose": "区分是否仍在掉块、开裂或移动"
+    },
+    {
+      "field": "traffic",
+      "purpose": "明确是否威胁道路或人员，不能要求冒险到坡脚拍照"
+    },
+    {
+      "field": "drainage",
+      "purpose": "记录降雨和水路变化，只作调查线索"
+    }
+  ],
+  "candidate_directions": [
+    {
+      "label": "表层松散或局部掉块待查",
+      "support_to_seek": "落块位置、范围和表层状态",
+      "counter_to_seek": "深部或支挡变形证据",
+      "next_check": "在安全范围记录落块和防护状态，由专业人员判断调查范围"
+    },
+    {
+      "label": "坡体或支挡整体变化待查",
+      "support_to_seek": "连续裂缝、错动、支挡变形及发展时序",
+      "counter_to_seek": "调查显示局部表面问题且无整体变化证据",
+      "next_check": "调取地质、防护设计和监测资料，判断是否需要专项调查"
+    },
+    {
+      "label": "排水异常参与病害发展待查",
+      "support_to_seek": "堵塞、集中出水、冲沟与变形的时空关系",
+      "counter_to_seek": "资料和调查不支持水路关联",
+      "next_check": "核对截排水设施及汇水变化，不因雨后就直接认定原因"
+    }
+  ],
+  "handling_directions": [
+    {
+      "approach": "按查明的范围研究排水、防护或支挡等方向",
+      "conditions": "结构、地质和变形机制等条件查明，具备相应设计及审批",
+      "limitations": "不凭照片确定抗滑措施、锚固参数或坡体稳定性"
+    }
+  ],
+  "source_refs": [
+    {
+      "book_id": "156-公路路基养护技术规范-JTG5150-2020",
+      "page": 15,
+      "clauses": [
+        "3.1.2",
+        "3.1.4"
+      ],
+      "checked": "2026-10-20 read",
+      "supports": "边坡、支挡与排水属于养护对象，病害需调查评估；不证明具体机理"
+    }
+  ],
+  "known_gaps": [
+    "知识和无数值关注规则待专业审阅",
+    "不具备地质分析或稳定计算能力"
+  ],
+  "analysis_profile": "slope-instability-v1",
+  "output_guidance": "结合实际资料填写领域上下文；候选说明事实联系、缺口与区分线索；核查说明不同结果的下一步。未知明确保留，内容仍待专业审核。"
+}
