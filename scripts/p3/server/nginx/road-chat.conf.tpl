@@ -8,9 +8,8 @@ server {
 }
 
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name __DOMAIN__;
 
     # certbot 会自动补全证书配置；这里只是占位

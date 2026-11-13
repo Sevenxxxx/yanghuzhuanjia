@@ -57,10 +57,14 @@ sudo chmod -R a-w /srv/road/app /srv/road/specs
 
 ```
 DEEPSEEK_API_KEY=proxy-held
-DEEPSEEK_BASE_URL=http://127.0.0.1:8096
+ROAD_CHAT_PATCH=/srv/road/app/scripts/p3/server/proxy.patch.yml
 ROAD_EXPERT_CONFIG=/etc/road-chat/config.json
 ROAD_CHAT_COOKIE_SECURE=1
 ```
+
+> 注意：`DEEPSEEK_BASE_URL` 对 dsh 的 Messages 适配器**不生效**（实测过），必须用
+> `ROAD_CHAT_PATCH` 指向 `proxy.patch.yml`；否则前端会带着占位 key 直连官方接口，
+> 表现为「模型没有返回内容」。
 
 `proxy.env`（代理服务，真实 key；权限 600）：
 
@@ -87,16 +91,18 @@ sudo certbot --nginx -d road.example.com
 ## 5. 先过门槛，再加同事
 
 ```bash
-sudo -u roadchat bash -lc 'cd /srv/road/app && python3 -X utf8 scripts/road.py --doctor'
-sudo -u roadchat bash -lc 'cd /srv/road/app && printf %s "{\"op\":\"spec-search\",\"query\":\"沥青路面养护\"}" | python3 -X utf8 scripts/road.py -'
-bash scripts/p3/server/health.sh
+sudo bash scripts/p3/server/acceptance.sh
 ```
 
-四条要全绿：`dsh --version`、`road.py --doctor`（spec 库存在、store 在 `/srv/road/work` 下）、
-一条 `spec-search`、页面里一次真实模型调用。规范工具是原 Windows 项目，Linux 首次运行
-是首要风险；不通就转 [Windows 备选](windows-notes.md)。
+一次跑完：程序安装、`road.py --doctor`、一条 `spec-search`、两个服务、代理转发、nginx 配置、
+目录权限、日志里有没有 key。**全部 ✓ 才继续**；有 ✗ 就按提示修，不要先把口令发出去。
+
+规范工具是原 Windows 项目，Linux 首次运行是首要风险；`acceptance.sh` 里第二组失败就转
+[Windows 备选](windows-notes.md)。
 
 ## 6. 验收（见 ADR 0005 第 7 节）
+
+给同事的口径直接发 [onboarding.md](onboarding.md)。
 
 - 两个浏览器各自提问，答案不串台；
 - A 正在长回答时 B 点停止，A 不受影响；

@@ -2,7 +2,21 @@
 
 本文件集中维护有日期的验证和历史处理记录；最新复验置于最前。旧路径、旧测试数量和历史人工查看不能作为新版本验证。运行命令与接手入口见 [交接.md](交接.md)。
 
-## 2026-11-13：0.3.0 服务器化（按访问者隔离运行时）
+## 2026-11-13（晚）：买服务器前的预检与两处修正
+
+用户准备购买服务器，先做能离线做的事：
+
+| 检查/修正 | 结果 |
+|---|---|
+| 五个服务器脚本 `bash -n`（用 Git Bash 5.3 的 bash 解析，不执行） | bootstrap / install-app / backup / health / acceptance 全部通过 |
+| nginx 模板 `http2 on;` | **修正**：该指令要 nginx ≥1.25.1，Ubuntu 24.04 带的是 1.24，`nginx -t` 会直接报错；改回 `listen 443 ssl http2;` |
+| `roadchat.env` 的模型接线 | **修正**：原示例写的是 `DEEPSEEK_BASE_URL`，实测 dsh 的 Messages 适配器不读它；改为 `ROAD_CHAT_PATCH` 指向 `proxy.patch.yml`，并写明不加会表现成「模型没有返回内容」 |
+| 新增 `server/acceptance.sh` | 把上线门槛合成一条命令：程序、`road.py --doctor`、一条 `spec-search`、两个服务、代理转发、`nginx -t`、目录权限、日志无 key；有失败项则退出码 1 |
+| 新增 `server/onboarding.md` | 给同事的一页说明（能做什么、不能做什么、记录 24h、停止键代价、数据边界） |
+
+仍未验证（服务器到手后才能做）：`acceptance.sh` 的真实执行、`nginx -t`、systemd 启停、`guifanchaxun` 在 Linux 上运行、`sudo -u` 越权实测、攻击演练三条、20 次重建的真实轮次。
+
+## 2026-11-13：服务器化（按访问者隔离运行时）
 
 按 [ADR 0005](decisions/0005-server-deployment.md) 实现：一个地址、共享口令、每个访问者一个独立 dsh 运行时；停止只影响自己；不做空闲回收（用户决定），用「20 个新对话后重建」与「夜间重启」兜底；真 API key 移入本地模型代理。
 
