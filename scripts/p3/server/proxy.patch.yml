@@ -1,0 +1,6 @@
+# 让 dsh 走本地模型代理：真实 API key 只在代理进程里，前端进程只有占位值。
+# 由 roadchat.env 的 ROAD_CHAT_PATCH 指向本文件，app 启动每个运行时都会带上 --patch。
+- id: llm-deepseek
+  name: "@deepseek-ai/dsh-llm-deepseek-api-key"
+  config:
+    baseURL: http://127.0.0.1:8096

@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PRODUCT = ROOT / "道路养护 AI 技术专家——项目总体方案与 Codex 开发交接文档.md"
+PRODUCT = ROOT / "docs/道路养护 AI 技术专家——项目总体方案与 Codex 开发交接文档.md"
 HANDOFF = ROOT / "docs/交接.md"
 LINK = re.compile(r"\[[^\]\n]+\]\(\s*(<[^>\n]+>|[^)\n]+)\s*\)")
 

@@ -1,0 +1,127 @@
+# P3 本机专用 Web 实例的 profile patch：道路养护专家。
+#
+# 安装位置：%USERPROFILE%\dsh-roads\home\profiles\web\cordis.patch.yml
+# 由 scripts/p3/local_web.py 安装，不手工维护第二份。
+# 行覆盖会整体替换该行的 config，因此下面每个被覆盖的行都写全字段。
+
+- id: locale
+  name: "@deepseek-ai/dsh-client-locale"
+  config:
+    preference: zh
+
+# 出厂默认是 deepseek-official（需要 API key）；本机实际可用的是账号登录路由。
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: deepseek-account
+    model: deepseek-flash
+    reasoningEffort: high
+
+# 与现有个人 profile 一致：空模型列表，避免没有 key 的模型出现在选择器里。
+- id: llm-deepseek
+  name: "@deepseek-ai/dsh-llm-deepseek-api-key"
+  config:
+    models: []
+
+# road.py 必须写仓库外存储，出厂默认的 workspace-write 会处处要求审批。
+- id: permission
+  name: "@deepseek-ai/dsh-permission-presets"
+  config:
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+    defaultPreset: danger-full-access
+
+# 监听具体局域网地址时，Host 与绑定地址字面量相同即通过校验；
+# trustedHosts 保留给经主机名或代理访问的情况，取命令行 --trusted-host。
+- id: connection
+  config:
+    trustedHosts: !!js ctx.webStartup.trustedHosts
+    cookieMaxAgeDays: 7
+
+- id: agent-preset-registry
+  name: "@deepseek-ai/dsh-agent-preset-registry"
+  config:
+    default: road
+    selectedDefault: road
+
+- insert:
+    - id: preset-road
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: road
+        name: 道路养护专家
+        description: 道路养护病害、路面沉陷、边坡与桥涵异常的技术咨询；本地工具检索、规范回源与咨询记录。
+        order: 1
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: |
+                你是道路养护技术咨询专家助手，服务一线养护工程师。本实例只做咨询，不做软件开发。
+                以项目 AGENTS.md 中「咨询与证据」「数据与交付」两节和 .agents/skills/road-diagnosis 技能为准；AGENTS.md 中关于开发交接、测试与提交的要求不适用于本实例，不必读 docs/交接.md 或源码。
+                每次实际咨询必须实际调用 scripts/road.py，不得凭记忆声称已筛查。不签发工程安全结论或施工批准；信息不足时给条件化意见并写明缺口。
+                不修改项目仓库、不安装插件、不改本机配置。
+          - id: agent-instructions
+            name: "@deepseek-ai/dsh-agent-instructions"
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: "@deepseek-ai/dsh-time-context"
+          - id: tool-bash
+            name: "@deepseek-ai/dsh-tool-bash"
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: "@deepseek-ai/dsh-tool-pwsh"
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: "@deepseek-ai/dsh-tool-fs"
+            config:
+              applyPatch: false
+          - id: tool-fs-search
+            name: "@deepseek-ai/dsh-tool-fs-search"
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-jobs
+            name: "@deepseek-ai/dsh-tool-jobs"
+          - id: skill-filesystem
+            name: "@deepseek-ai/dsh-skill-filesystem"
+          - id: tool-skill
+            name: "@deepseek-ai/dsh-tool-skill"
+          - id: tool-ask-user
+            name: "@deepseek-ai/dsh-tool-ask-user"
+          - id: tool-todo
+            name: "@deepseek-ai/dsh-tool-todo"
+            config:
+              allowParallelInProgress: true
+          - id: present
+            name: "@deepseek-ai/dsh-tool-present"
+          - id: tool-web
+            name: "@deepseek-ai/dsh-tool-web"
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: "@deepseek-ai/dsh-compaction-basic"
+              - id: command-compact
+                name: "@deepseek-ai/dsh-command-compact"
+              - id: tool-result-pruner
+                name: "@deepseek-ai/dsh-compaction-tool-result-pruner"
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

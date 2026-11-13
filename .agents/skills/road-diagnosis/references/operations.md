@@ -50,9 +50,10 @@ show 可加 revision 只读查看历史；resume 始终恢复最新，不用旧�
 
 先保存待答问题（fields 取 briefing.next_questions 中合适字段，通常只取一个）：
 
-    {"op":"question-ask","session_id":"实际 ID","base_revision":1,"fields":["traffic"]}
+    {"op":"question-ask","session_id":"实际 ID","base_revision":1,"fields":["traffic"],
+     "decision_impact":{"traffic":"若仍通行则先管控；若已封闭则转核查；不清楚按仍有暴露处理"}}
 
-返回 session_revision、questions（id／field／question／purpose／可选 options）。display_status=host_must_prompt 表示尚待宿主实际显示；程序本身不开弹窗。当前存在待答问题、已问或已提供的字段不能重复创建。无选项的题使用自由填写。
+`decision_impact` 必须逐一对应 fields，写明不同答案会改变什么判断或下一步，不能只写通用目的；`briefing.next_questions` 返回的默认文本只是提示，须结合本例改写。返回 session_revision、questions（id／field／question／purpose／decision_impact／可选 options）。display_status=host_must_prompt 表示尚待宿主实际显示；程序本身不开弹窗。当前存在待答问题、已问或已提供的字段不能重复创建。无选项的题使用自由填写。
 
 真实答复通过 turn 保存：
 
@@ -87,9 +88,9 @@ applicability 还可为 applicable／not_applicable／unknown。需看图时加 
 
 ## 保存 Agent 分析
 
-    {"op":"answer","session_id":"实际 ID","base_revision":5,"answer":{"summary":"当前重点与必要风险提示","hypotheses":[{"label":"条件化候选原因","support_fact_ids":["实际事实 ID"],"against_fact_ids":[],"uncertainties":["待区分内容"]}],"next_checks":[{"action":"具体资料准备或核查方向","purpose":"解决什么疑问","different_results":"不同结果怎样改变判断"}],"claims":[{"text":"该原文支持的判断","review_ids":["实际 review ID"]}],"options":[{"approach":"参考方向","conditions":"成立前提","limitations":"限制"}],"handoff":["带什么资料、解决什么问题"],"questions":[{"field":"drainage","question":"一个关键问题","purpose":"区分目的"}],"limitations":["实际缺口与未验证事项"],"case_refs":[]}}
+    {"op":"answer","session_id":"实际 ID","base_revision":5,"answer":{"summary":"当前重点与必要风险提示","hypotheses":[{"label":"条件化候选原因","support_fact_ids":["实际事实 ID"],"against_fact_ids":[],"uncertainties":["待区分内容"]}],"next_checks":[{"action":"具体资料准备或核查方向","purpose":"解决什么疑问","different_results":"不同结果怎样改变判断"}],"claims":[{"text":"该原文支持的判断","review_ids":["实际 review ID"]}],"options":[{"approach":"参考方向","conditions":"成立前提","limitations":"限制"}],"handoff":["带什么资料、解决什么问题"],"questions":[{"field":"drainage","question":"一个关键问题","purpose":"区分目的","decision_impact":"若有渗水则优先核查水路，若否认仍保留隐蔽水路待查"}],"limitations":["实际缺口与未验证事项"],"case_refs":[]}}
 
-hypotheses、claims、options、questions、case_refs 可为空；没有候选就明确尚不能形成，不必凑数量。summary、next_checks（每项 action 和 purpose）、limitations 必填。questions 每轮最多3个；已答／已问或明确不可获得的字段不重复问，必要的新区分内容在交接中说明。
+hypotheses、claims、options、questions、case_refs 可为空；没有候选就明确尚不能形成，不必凑数量。summary、next_checks（每项 action 和 purpose）、limitations 必填。questions 每轮最多3个；已答／已问或明确不可获得的字段不重复问，必要的新区分内容在交接中说明。旧式 answer.questions 未提供 decision_impact 时使用该字段的通用默认值；新流程应使用 question-ask 并逐题写明答案影响。
 
 新弹窗流程使用 question-ask 记录问题，answer.questions 留空，避免重复登记。路面沉陷咨询设置 analysis_profile="pavement-subsidence-v1"；此模板要求每个 hypothesis 带 reasoning 和 discriminator，每个 next_check 带 different_results。这些内容会进入 Markdown 导出；旧记录仍可读取，无需迁移或补写历史字段。
 
@@ -116,11 +117,39 @@ export自动重查，errors阻止当前交付；可传expected_check_sha256绑�
 - Word依赖本机已配置文档运行环境；默认使用Codex捆绑Python，可在仓库外本机配置设置document_python绝对路径。不自动安装、付费、上传。运行环境缺失明确报错，不生成占位文件。
 - Word返回visual_review=pending_actual_render_and_view，宿主随后渲染并逐页核对。导出成功不等于已看图或专业审核；临时照片副本清理后，已明确导出的嵌图Word仍完整保留。
 
+## 本地资料库（教材、论文、案例原文）
+
+library-add：path（已获准的本机绝对 PDF）、type（textbook／paper／case_source／report／other）、title、authors、year、publisher、domain、topics、language、rights_basis；可选 library_id、source_url、doi、printed_page_offset。复制 PDF 到 `data/library/<library_id>/`，生成 pages.json、source.txt、source.json，校验 SHA-256；同编号不覆盖。
+
+library-list：可选 type、topic、domain；列出书目与计数。
+library-source：library_id；返回页数、哈希、来源、访问级别。
+library-toc：library_id；返回 PDF 书签目录；无书签时为空，需按页读。
+library-read：library_id、page；按页返回文本；扫描页 needs_visual。
+library-search：query、可选 type／topic、limit（1～20）；字面检索，返回页码、书页和摘录。
+library-render：library_id、page；渲染 PDF 页到受控存储，供核对表格、公式和扫描页。
+library-rebuild：扫描资料目录重建索引，用于恢复。
+
+`data/library/` 整体 gitignore，仅本地使用；公开可访问不等于可自由转载。资料命中只表示字面出现，不证明原文支持当前判断；规范仍走 spec-*，案例审核仍走 case-*。不做 OCR、自动摘要或全文外发。
+
 ## 案例工具与人工入口
 
-case-search：domain、tags（只用观察／条件词）、可选 excluded_events。可关联咨询；无合格案例返回 no_qualified_cases，索引损坏返回 index_unavailable，不混同。
+case-search：domain、tags（只用观察／条件词）、可选 excluded_events、scope（默认 verified；candidate 查候选库；all 同时返回）。可关联咨询；无合格案例返回 no_qualified_cases，索引损坏返回 index_unavailable，不混同。候选结果带 evidence_status=unverified_candidate，只作背景线索，不得写入 case_refs。
+
+case-list：可选 area=incoming／verified／rejected，列出案例元数据、摘要、状态和计数；不返回受限内容。
+
+case-show：case_id、可选 area；返回单个案例全文供核对，verified 仍按发布门槛复核。
+
+case-source：旧接口，仅兼容 0.1.7 的 `data/cases/sources`；新资料统一用 library-add（type=case_source）。返回本地全文元数据（access_level、页数、哈希、来源）；未存全文时 available=false。
+
+case-source-read：case_id、page；按页返回本地文本，受页数、长度和哈希校验限制；不解析图表或扫描件。
+
+case-source-search：case_id、query、limit（1～10）；字面检索并返回页码与摘录；命中不等于原文支持当前判断。
+
+全文副本放 `data/cases/sources/<case_id>/`（source.pdf、source.txt、pages.json、source.json），仅本地使用并已加入 .gitignore；不提交 Git、不再分发。受版权或权限限制的全文不得绕过访问控制获取。
 
 case-import：case 对象。原始字段见 docs/case-policy.md。仅接收有明确外发许可的公开脱敏资料，导入一律 pending_review；合成资料拒绝进入真实库。
+
+case-reject：只处理候选库，提供 case_id、reason；保留旧版本并移入 rejected，不删除理由。
 
 case-publish 需要人类审核后提供 case_id、reviews、allowed_claims、human_confirmation。只供已完成的人工专业审核录入，不授权 Agent 冒充审核人员。
 

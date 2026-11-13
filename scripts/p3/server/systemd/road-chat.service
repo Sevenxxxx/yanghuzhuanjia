@@ -1,0 +1,25 @@
+[Unit]
+Description=Road maintenance chat frontend (per-visitor runtimes)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=roadchat
+Group=roadchat
+WorkingDirectory=/srv/road/app
+EnvironmentFile=/etc/road-chat/roadchat.env
+ExecStart=/usr/bin/python3 -X utf8 /srv/road/app/scripts/p3/chat/app.py --host 127.0.0.1 --port 8095 --home /srv/road/work
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+
+# 权限收敛：只允许写工作目录与日志
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/road/work
+
+[Install]
+WantedBy=multi-user.target

@@ -9,8 +9,10 @@ from roadexpert.service import App
 
 
 class TrialFlowTests(Isolated):
-    def ask(self, session, fields=None):
-        result = self.request(session, "question-ask", fields=fields or ["traffic"])
+    def ask(self, session, fields=None, impacts=None):
+        fields = fields or ["traffic"]
+        impacts = impacts or {f: f"合成影响：{f} 的答案会改变下一个核查方向" for f in fields}
+        result = self.request(session, "question-ask", fields=fields, decision_impact=impacts)
         return self.app.store.read(session["id"]), result["questions"]
 
     def reply(self, session, q, reply="不清楚", state="unknown", **kwargs):
@@ -26,6 +28,37 @@ class TrialFlowTests(Isolated):
         self.assertEqual(restored["session"]["facts"], [])
         with self.assertRaises(RoadError):
             self.ask(s, ["location"])
+
+    def test_question_decision_impact_is_required_and_case_specific(self):
+        s = self.start()
+        with self.assertRaises(RoadError):
+            self.request(s, "question-ask", fields=["traffic"])
+        with self.assertRaises(RoadError):
+            self.request(s, "question-ask", fields=["traffic"], decision_impact={"location": "错位"})
+        with self.assertRaises(RoadError):
+            self.request(s, "question-ask", fields=["traffic"], decision_impact={"traffic": ""})
+        result = self.request(s, "question-ask", fields=["traffic"],
+                              decision_impact={"traffic": "若仍通行则先管控；若已封闭则转核查；不清楚按暴露处理"})
+        impact = result["questions"][0]["decision_impact"]
+        self.assertIn("若仍通行", impact)
+        restored = self.app.dispatch({"op": "resume", "session_id": s["id"]})
+        self.assertEqual(restored["resume_summary"]["pending_questions"][0]["decision_impact"], impact)
+
+    def test_briefing_suggests_decision_impact_for_each_question(self):
+        briefing = self.app.briefing(self.start())
+        self.assertTrue(briefing["next_questions"])
+        self.assertTrue(all(q["decision_impact"] for q in briefing["next_questions"]))
+
+    def test_legacy_question_gets_default_impact_and_report_shows_it(self):
+        s = self.start()
+        answer = self.answer_data()
+        answer["questions"] = [{"field": "location", "question": "具体位置？", "purpose": "明确部位"}]
+        self.request(s, "answer", answer=answer)
+        s = self.app.store.read(s["id"])
+        impact = s["question_log"][0]["decision_impact"]
+        self.assertTrue(impact)
+        report = self.app.render_report(s)
+        self.assertIn("答案影响：" + impact, report)
 
     def test_unsubmitted_and_unknown_as_known_are_rejected_without_write(self):
         s, qs = self.ask(self.start())

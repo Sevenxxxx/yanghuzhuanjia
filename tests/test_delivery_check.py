@@ -60,7 +60,8 @@ class DeliveryCheckTests(Isolated):
         self.assertEqual(result["delivery_check"], check)
         with self.assertRaises(RoadError):
             self.request(s, "export", user_requested=True, kind="department_reply", expected_check_sha256=check["content_sha256"])
-        self.request(s, "question-ask", fields=["traffic"])
+        self.request(s, "question-ask", fields=["traffic"],
+                     decision_impact={"traffic": "合成影响：不同回答改变管控或核查方向"})
         with self.assertRaises(RoadError):
             self.request(s, "export", user_requested=True, kind="field_advice", expected_check_sha256=check["content_sha256"])
         s = self.app.store.read(s["id"])

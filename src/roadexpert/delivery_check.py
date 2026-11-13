@@ -14,6 +14,26 @@ from .storage import RoadError, canonical, digest, load_json
 MEASUREMENT = re.compile(r"(?<![0-9A-Za-z.])\d+(?:\.\d+)?\s*(?:毫米|厘米|千米|米|小时|分钟|天|摄氏度|mm|cm|km|m|MPa|kPa|kN|%|％|℃|度)(?![A-Za-z])", re.I)
 STANDARD = re.compile(r"(?:JTG(?:/T)?|CJJ(?:/T)?|GB(?:/T)?|JT/T)\s*[A-Z]?\s*\d+(?:\.\d+)?\s*[-—–－]\s*\d{4}", re.I)
 CLAUSE = re.compile(r"(?:第\s*)?\d+\.\d+(?:\.\d+)?\s*条")
+CITATION_NAME = re.compile(r"《[^》]{2,60}》")
+
+
+def citation_name_missing(text):
+    """每个标准号**首次**出现时是否带了《规范名称》。
+
+    只查首次出现：写清一次之后，后文用「同规范」或只写编号是正常的写法。
+    """
+    missing, seen = [], set()
+    for token in STANDARD.finditer(text):
+        key = normalized(token.group())
+        if key in seen:
+            continue
+        seen.add(key)
+        start = max(text.rfind("。", 0, token.start()),
+                    text.rfind("；", 0, token.start()),
+                    text.rfind("\n", 0, token.start())) + 1
+        if not CITATION_NAME.search(text[max(0, start):token.start()]):
+            missing.append(token.group())
+    return missing
 SKIP_KEYS = {"at", "based_on_turn", "photo_context", "risk_snapshot", "technical_review", "stale_after_turn", "analysis_profile", "status"}
 
 
@@ -131,7 +151,10 @@ def check_delivery(app, data, kind="consultation", file_format="markdown", inclu
             query = app.store.get_receipt(rid)
             if query["kind"] != "case-search":
                 raise RoadError("无实际案例查询")
-            case = next(m["case"] for m in query["payload"]["matches"] if m["case_id"] == ref["case_id"])
+            matched = next(m for m in query["payload"]["matches"] if m["case_id"] == ref["case_id"])
+            if matched.get("evidence_status") == "unverified_candidate":
+                raise RoadError("候选案例未经人工审核，不能作为 case_refs 依据")
+            case = matched["case"]
             current = app.cases.validate(load_json(app.cases._path("verified", ref["case_id"])), published=True)
             if digest(canonical(current)) != digest(canonical(case)):
                 raise RoadError("案例已变化")
@@ -157,6 +180,9 @@ def check_delivery(app, data, kind="consultation", file_format="markdown", inclu
         for token in STANDARD.finditer(value):
             if normalized(token.group()) not in standards:
                 finding(warnings, "standard_source_unmatched", location, "标准号未匹配本次有效规范审阅；不能仅凭正文声称已核实", token.group())
+        for token in citation_name_missing(value):
+            finding(warnings, "standard_citation_name_missing", location,
+                    "该标准号首次出现时没有写规范名称，读者无法定位；应写成《规范全名》（编号）", token)
         for token in CLAUSE.finditer(value):
             if normalized(token.group()).removeprefix("第") not in clauses:
                 finding(warnings, "clause_source_unmatched", location, "条号未在本次有效审阅摘录中直接匹配，需核对标准、版本和原页", token.group())

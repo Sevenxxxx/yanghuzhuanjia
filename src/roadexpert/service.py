@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .cases import Cases, DOMAINS
+from .library import Library
 from .advice import PROFILES, DELIVERIES, validate_deliveries, render_delivery
 from .comparison import validate_comparison, comparison_lines
 from .photos import prepare_photo, checked_photo, validate_photo_fact, photo_observation, photo_lines, fact_label, STATE_LABELS
@@ -36,6 +37,20 @@ QUESTIONS = {
 QUESTION_OPTIONS = {
     "traffic": ["仍有车辆通行", "已停止通行", "不清楚"],
     "progression": ["仍在扩大或加重", "根据已有观察未见扩大或加重", "不清楚"],
+}
+# What different answers would change. These are prompt-level defaults for
+# briefing and legacy questions; question-ask requires the host to state a
+# case-specific impact. No numeric probability or engineering threshold.
+DECISION_IMPACT = {
+    "facility": "明确设施类型后才能选择对应规范与检查方法；仍不明确时按最不利的设施类型先提示风险，不套用单一规范。",
+    "progression": "若仍在扩大或加重，按发展性异常优先核查并提示现场管控；若明确未扩大，仍保留历史触发与复查要求，不能当作稳定；不清楚时保留未知并按可能发展处理。",
+    "traffic": "若仍有车辆通行，先提示现场警示、管控与报告，不等待完整分析；若已停止通行，仍不能视为安全，转为核查异常对结构或路面的影响；不清楚时按仍有暴露处理。",
+    "location": "位置决定成因候选、规范适用与调查手段；位置不明时先给条件化方向并列为待核查，不凭空推断。",
+    "component": "构件不同，机理与检查方法不同；构件不明时先区分桥梁、涵洞及具体部位，避免把不同构件问题混作同一机理。",
+    "drainage": "若有渗水、积水、堵塞或排水变化，优先核查水相关机理和设施；若无，仍不能排除隐蔽水路，保留调查项；不清楚时列为待核查。",
+    "rain": "雨后出现只能说明时间关系；若现象与降雨、排水过程在时间或空间上对应，可提高水相关机理的核查优先级，但不能据此确认原因。",
+    "dimensions": "可安全获取的范围、方向和尺寸用于定位与比较；没有测量时保留未知，不把目测估计写成实测，也不要求进入危险部位。",
+    "road_class": "道路类别与等级影响规范适用和核查要求；不明时按实际管养单位适用规范核对，不默认公路或城市道路。",
 }
 
 
@@ -65,6 +80,7 @@ class App:
             raise RoadError("咨询存储必须位于仓库外；测试也使用临时目录")
         self.store = Store(store)
         self.cases = Cases(self.project / "data/cases")
+        self.library = Library(self.project / "data/library", self.store)
 
     def specs(self):
         return Specs(self.config["spec_skill"], self.store, self.config.get("tool_timeout_seconds", 45))
@@ -311,17 +327,23 @@ class App:
         asked = {q["field"] for q in data["question_log"]}
         if supplied.intersection(fields) or asked.intersection(fields):
             raise RoadError("此项已提供或已问过，不重复追问")
+        impacts = req.get("decision_impact")
+        if not isinstance(impacts, dict) or set(impacts) != set(fields):
+            raise RoadError("decision_impact 须逐一对应 fields，写明不同答案会改变什么；不能只写通用目的")
         questions = []
         for field in fields:
+            impact = text(impacts[field], "decision_impact." + field, 4000)
             q = {"id": uuid.uuid4().hex, "field": field, "question": QUESTIONS[field][0],
-                 "purpose": QUESTIONS[field][1], "status": "pending", "at": now()}
+                 "purpose": QUESTIONS[field][1], "decision_impact": impact,
+                 "status": "pending", "at": now()}
             if field in QUESTION_OPTIONS:
                 q["options"] = QUESTION_OPTIONS[field]
             questions.append(q)
         data["question_log"].extend(questions)
         data = self.store.write(data, req.get("base_revision"))
         return {"session_revision": data["revision"], "questions": copy.deepcopy(questions),
-                "display_status": "host_must_prompt", "notice": "这里只保存待答问题；宿主还须实际调用弹窗或正文提问。"}
+                "display_status": "host_must_prompt",
+                "notice": "这里只保存待答问题及答案影响；宿主还须实际调用弹窗或正文提问。"}
 
     def close_questions(self, req):
         self.require_allowed(req)
@@ -347,7 +369,8 @@ class App:
         candidates = [x for x in order if x not in supplied and x not in asked]
         # Do not repeatedly ask after unavailable/unsafe facts; facts of those states count as supplied.
         pending = [q for q in data["question_log"] if q.get("status") == "pending"]
-        questions = [{"field": x, "question": QUESTIONS[x][0], "purpose": QUESTIONS[x][1]} for x in candidates[:3]] if not pending else []
+        questions = [{"field": x, "question": QUESTIONS[x][0], "purpose": QUESTIONS[x][1],
+                      "decision_impact": DECISION_IMPACT[x]} for x in candidates[:3]] if not pending else []
         cards = []
         for path in sorted((self.project / "data/knowledge").glob("*.json")):
             card = load_json(path)
@@ -358,7 +381,8 @@ class App:
                 "photos": copy.deepcopy(data.get("photos", [])),
                 "question_stop": "没有可安全补充的信息时停止追问，输出调查和交接清单",
                 "knowledge_cards": cards, "host_work": "结合原话与证据自主鉴别；卡片未专业审核，不直接当规范或确定原因",
-                "case_query": {"domain": data["domain"], "tags": "使用观察现象和工程条件，不仅使用猜测的原因"}}
+                "case_query": {"domain": data["domain"], "tags": "使用观察现象和工程条件，不仅使用猜测的原因",
+                               "scope": "默认 verified；需要背景线索时显式 scope=candidate，候选不得写入 case_refs"}}
 
     def resume_summary(self, data):
         """Derived view only: never rewrite history or infer completed field work."""
@@ -555,6 +579,8 @@ class App:
             matched = [m for m in query["payload"].get("matches", []) if m["case_id"] == ref.get("case_id")]
             if not matched:
                 raise RoadError("案例未在实际查询结果中")
+            if matched[0].get("evidence_status") == "unverified_candidate" or query["payload"].get("scope") == "candidate":
+                raise RoadError("候选案例未经人工审核，不能作为 case_refs 依据；先审核发布为 verified")
             current = self.cases.validate(load_json(self.cases._path("verified", ref["case_id"])), published=True)
             if digest(canonical(current)) != digest(canonical(matched[0]["case"])):
                 raise RoadError("案例版本已变化，请重新查询")
@@ -582,8 +608,12 @@ class App:
                 raise RoadError("此信息已经提供／明确无法获取，不重复追问；必要时说明新的区分问题")
             if any(x["field"] == field for x in data["question_log"]):
                 raise RoadError("已问过该项；未知／无法获取时应停止循环")
+            impact = q.get("decision_impact")
+            impact = DECISION_IMPACT[field] if impact is None else text(impact, "question.decision_impact", 4000)
+            q["decision_impact"] = impact
             data["question_log"].append({"field": field, "question": text(q.get("question"), "question", 1000),
-                                         "purpose": text(q.get("purpose"), "purpose", 1000), "at": now()})
+                                         "purpose": text(q.get("purpose"), "purpose", 1000),
+                                         "decision_impact": impact, "at": now()})
         if len(answer.get("questions", [])) > 3:
             raise RoadError("每轮最多追问 3 个关键问题")
         answer.update(at=now(), based_on_turn=data["turns"][-1]["id"],
@@ -637,6 +667,8 @@ class App:
         lines += ["", "## 信息缺口与追问"]
         for item in latest.get("questions", []):
             lines.append(f"- {item['question']}；目的：{item['purpose']}")
+            if item.get("decision_impact"):
+                lines.append(f"  答案影响：{item['decision_impact']}")
         for item in self.active_facts(data):
             if item["state"] != "known":
                 lines.append(f"- {STATE_LABELS.get(item['state'], item['state'])}：{item['value']}")
@@ -661,6 +693,8 @@ class App:
                       f"- {changes['notice']}"]
         for q in recovery["pending_questions"] + recovery["unanswered_questions"]:
             lines.append(f"- [{q['status']}] {q['question']}")
+            if q.get("decision_impact"):
+                lines.append(f"  答案影响：{q['decision_impact']}")
         lines.append(f"- 核查进度：{recovery['checks_status']}")
         lines += ["", *self.render_evidence(data, latest)]
         lines += ["", "## 参考处理方向"]
@@ -829,11 +863,40 @@ class App:
         if op == "export":
             with self.store.lock(req.get("session_id")):
                 return self.export(req)
+        if op == "library-add":
+            return self.library.add(req)
+        if op == "library-list":
+            return self.library.list(req.get("type"), req.get("topic"), req.get("domain"))
+        if op == "library-source":
+            return self.library.source(req.get("library_id"))
+        if op == "library-toc":
+            return self.library.toc(req.get("library_id"))
+        if op == "library-read":
+            return self.library.read(req.get("library_id"), req.get("page"))
+        if op == "library-search":
+            return self.library.search(req.get("query"), req.get("type"), req.get("topic"), req.get("limit", 5))
+        if op == "library-render":
+            return self.library.render(req.get("library_id"), req.get("page"))
+        if op == "library-rebuild":
+            return self.library.rebuild()
         if op == "case-search":
             self.require_allowed(req)
-            result = self.cases.search(req.get("domain", "general"), req.get("tags", []), req.get("excluded_events"))
+            result = self.cases.search(req.get("domain", "general"), req.get("tags", []),
+                                       req.get("excluded_events"), req.get("scope", "verified"))
             receipt = self.store.receipt(op, result)
             return {"receipt": receipt, "session_revision": self.attach(req, receipt)}
+        if op == "case-list":
+            return self.cases.list_cases(req.get("area"))
+        if op == "case-show":
+            return self.cases.show(req.get("case_id"), req.get("area"))
+        if op == "case-source":
+            return self.cases.source_meta(req.get("case_id"))
+        if op == "case-source-read":
+            return self.cases.source_read(req.get("case_id"), req.get("page"))
+        if op == "case-source-search":
+            return self.cases.source_search(req.get("case_id"), req.get("query"), req.get("limit", 5))
+        if op == "case-reject":
+            return self.cases.reject(req.get("case_id"), req.get("reason"))
         if op == "case-import":
             return self.cases.import_case(req.get("case"))
         if op == "case-publish":

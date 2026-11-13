@@ -1,6 +1,6 @@
 # 当前个人版架构
 
-Codex 负责理解和分析，项目工具负责状态、约束与证据。没有独立模型服务、dsh 后台或产品页面。
+Codex／dsh 负责理解和分析，项目工具负责状态、约束与证据。个人版没有独立模型服务；P3 本机单实例（`scripts/p3/`）只把同一套工具接到本机 Web，取舍与限制见 [ADR 0002](decisions/0002-p3-local-web.md)。
 
 ```mermaid
 flowchart TB
@@ -26,9 +26,10 @@ flowchart TB
 ## 目录入口
 
 - `scripts/road.py`：JSON 请求入口；`scripts/check_*.py`：开发检查，命令与影响见 [交接验证表](交接.md#验证与交付)。
+- `scripts/p3/`：P3 本机入口。`road_expert.patch.yml` 是专家职责与工具面的唯一来源；`local_web.py` 起停 dsh 自带界面实例；`chat/`（`app.py` + `page.html`）是纯聊天前端，自己的页面经 HTTP/SSE 接到 `dsh --profile road-sdk` 的 stdio JSON-RPC；数据在仓库外。
 - `src/roadexpert/`：下列业务模块；`tests/`：对应回归，`tests/fixtures/synthetic/`：合成情境。
 - `.agents/skills/road-diagnosis/`：唯一咨询技能及 `references/` 操作参考。
-- `data/knowledge/`：草稿知识卡；`data/cases/`：真实案例与派生索引，允许空库。
+- `data/knowledge/`：草稿知识卡；`data/cases/`：真实案例与派生索引，允许空库；`data/library/`：教材、论文、案例原文，本地 PDF 与分页文本，目录整体 gitignore。
 - `config.example.json`：本机配置示例；真实咨询、证据、请求正文和导出存储在仓库外。
 
 ## 模块与边界
@@ -36,8 +37,9 @@ flowchart TB
 - storage.py：临时工作状态与按需保存档案，通过 retention 区分；24小时未写入的临时状态在后续调用清理，明确结束时即时清理；修订快照、指纹、版本检查、写锁和受控路径仍用于当次连续问诊。
 - risk.py：五类无数值关注线索、否定／未知／历史／假设初筛；规则为草稿，宿主补结构化抽取。
 - specs.py：固定操作与字面查询，不调用维护命令；原页在项目外部存储渲染。
-- cases.py：JSON 单源、分项人工审核、撤回与查询时索引复核。
-- service.py：多轮、证据关联、适用性声明、答案绑定；save 是显式长期归档，export 是显式导出，backup 只含主动保存的档案。默认不展示编号或保存流程。
+- cases.py：JSON 单源、分项人工审核、撤回与查询时索引复核；候选库可列表、查看、背景检索和拒绝，候选不进索引、不得写入 case_refs；本地全文来源按页读取／检索，副本在仓库外使用语义的 sources 目录并 gitignore。
+- library.py：本地资料库；PDF 入库后生成分页文本、目录、SHA-256，支持按类型／主题列表、字面检索、按页读取和渲染；不做 OCR、索引维护、自动摘要，不替代规范回源或案例审核。
+- service.py：多轮、问题决策影响、证据关联、适用性声明、答案绑定；save 是显式长期归档，export 是显式导出，backup 只含主动保存的档案。默认不展示编号或保存流程。
 - advice.py：分领域分析字段与三种交付格式的契约；不推断病因。专项导出只取最新且未过时的对应交付内容，共用来源、风险、规范核验与判断边界；原完整咨询导出继续可用。
 - photos.py：用户获准附件的受控副本、元信息及实际查看声明；图片观察生成带定位的事实，照片变化使旧意见和规范适用性需重新核对。副本在咨询sessions目录，复用临时清理和主动保存备份，不保存或改写用户原图。
 - comparison.py：有条件的方向比较与当前已知事实引用，不自动排序、评分或批准施工。比较进入聊天及按需文件。
@@ -52,4 +54,4 @@ flowchart TB
 
 依赖和配置见 [当前交接](交接.md#本机运行与换机注意)：照片使用 Pillow，原页渲染使用 PyMuPDF，Word 由独立文档 Python 及 python-docx／Pillow 生成。早期“标准库 CLI”描述不能理解为所有现有功能均无需外部依赖。
 
-P3 再将现有输入输出接到 dsh 工具和应用服务，把必要关口纳入受控调用链，接最小页面。迁移复用知识、规则、案例与记录，模型／入口变化后重跑测试及专业评价。
+P3 现在做的是本机单实例（[ADR 0002](decisions/0002-p3-local-web.md)）：preset 把 `road-diagnosis` 技能与工具接到 dsh Web，实例有独立 home 与端口；账号体系、多人隔离、服务器部署和受控调用链都还没开始。迁移复用知识、规则、案例与记录，模型／入口变化后重跑测试及专业评价。

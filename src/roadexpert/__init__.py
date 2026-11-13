@@ -1,2 +1,2 @@
 """Personal road-maintenance consultation tools; no model or service runtime."""
-__version__ = "0.1.5"
+__version__ = "0.3.0"

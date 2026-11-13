@@ -19,6 +19,49 @@ def file_hash(path):
     return h.hexdigest()
 
 
+def display_std_no(std_no):
+    """把书架里的紧凑编号（JTG5142-2019、JTGT5142-01-2021）改成规范写法供引用。
+
+    只影响展示：字母与数字之间补空格，JTG/T 还原斜杠，年份前用破折号。
+    认不出的格式原样返回。
+    """
+    text = str(std_no or "").strip().upper()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"^JTGT(?=\d)", "JTG/T", text)
+    match = re.match(r"^([A-Z/]+)\s*(\d.*)$", text)
+    if match:
+        text = f"{match.group(1)} {match.group(2)}"
+    text = re.sub(r"-(\d{4})$", r"—\1", text)
+    return text
+
+
+def standard_name(title, std_no=""):
+    """从书架标题里取出规范名称，去掉索引序号与编号后缀。
+
+    书架标题形如 `154-公路沥青路面养护技术规范-JTG5142-2019`，模型若只拿到这种标题，
+    回答里容易只剩编号；这里给出可直接写进引用的名称。标题格式认不出时原样返回，
+    不猜、不改写。
+    """
+    name = str(title or "").strip()
+    name = re.sub(r"^\d+\s*[.\-、]\s*", "", name)
+    if std_no:
+        tail = re.search(r"[-_\s]?" + re.escape(str(std_no).strip()) + r"$", name, re.IGNORECASE)
+        if tail:
+            name = name[:tail.start()].strip(" -_、")
+    return name.strip() or str(title or "").strip()
+
+
+def citation_of(title, std_no=""):
+    """`《名称》（编号，年号）`；没有编号时只给书名号名称。"""
+    name = standard_name(title, std_no)
+    if not name:
+        return ""
+    shown = display_std_no(std_no)
+    return f"《{name}》（{shown}）" if shown else f"《{name}》"
+
+
 class Specs:
     def __init__(self, skill, store, timeout=45):
         self.skill = Path(skill).resolve()
@@ -39,7 +82,9 @@ class Specs:
         rows = [b for b in self.shelf() if query in
                 " ".join(str(b.get(k, "")) for k in ("id", "title", "std_no", "alias")).casefold().replace(" ", "")]
         return {"status": "ok", "total": len(rows),
-                "books": [{k: b.get(k) for k in ("id", "title", "std_no", "version", "pages", "type", "fmt", "status", "replaced_by")}
+                "books": [{**{k: b.get(k) for k in ("id", "title", "std_no", "version", "pages", "type", "fmt", "status", "replaced_by")},
+                           "standard_name": standard_name(b.get("title"), b.get("std_no")),
+                           "citation": citation_of(b.get("title"), b.get("std_no"))}
                           for b in rows[:100]], "truncated": len(rows) > 100}
 
     def book(self, book_id):
@@ -101,6 +146,16 @@ class Specs:
         except ValueError:
             return {"status": "tool_error", "complete": False, "error": "规范工具未返回有效 JSON"}
         complete = data.get("complete") is True and not data.get("truncated") and not data.get("unavailable_books")
+        # 命中行只带 book_id；补上可引用的名称，避免回答里只剩编号。
+        index = {str(b.get("id")): b for b in self.shelf()}
+        for match in data.get("matches") or []:
+            if not isinstance(match, dict):
+                continue
+            row = index.get(str(match.get("book_id"))) or {}
+            match.setdefault("book_title", row.get("title"))
+            match.setdefault("std_no", row.get("std_no"))
+            match.setdefault("standard_name", standard_name(row.get("title"), row.get("std_no")))
+            match.setdefault("citation", citation_of(row.get("title"), row.get("std_no")))
         status = "matched" if data.get("matches") else "not_found_in_scope"
         if not complete:
             status = "search_incomplete"
@@ -134,6 +189,8 @@ class Specs:
         needs_visual = ("【OCR】" in raw or "[表格页提示]" in raw or "[警告]" in raw
                         or meta.get("cache_source_verified") is False)
         return {"status": "page_read", "book_id": b["id"], "title": b["title"],
+                "standard_name": standard_name(b.get("title"), b.get("std_no")),
+                "citation": citation_of(b.get("title"), b.get("std_no")),
                 "std_no": b.get("std_no"), "version": b.get("version"), "page": page,
                 "source_path": str(source), "source_sha256": before, "index_source_matches": matched,
                 "replaced_by": b.get("replaced_by"), "virtual": bool(meta.get("virtual")),

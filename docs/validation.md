@@ -2,6 +2,186 @@
 
 本文件集中维护有日期的验证和历史处理记录；最新复验置于最前。旧路径、旧测试数量和历史人工查看不能作为新版本验证。运行命令与接手入口见 [交接.md](交接.md)。
 
+## 2026-11-13：0.3.0 服务器化（按访问者隔离运行时）
+
+按 [ADR 0005](decisions/0005-server-deployment.md) 实现：一个地址、共享口令、每个访问者一个独立 dsh 运行时；停止只影响自己；不做空闲回收（用户决定），用「20 个新对话后重建」与「夜间重启」兜底；真 API key 移入本地模型代理。
+
+**代码**：`chat/app.py` 改为运行时池（cookie `rc_vid` 标识访问者，独立 `DSH_HOME` 与 `LOCALAPPDATA`）；Linux 用 `start_new_session` + `os.killpg` 杀进程组；`ROAD_CHAT_PATCH` 支持部署级 patch；模型返回为空时明确报错而不是静默结束。新增 `proxy/model_proxy.py`、`server/`（bootstrap、install、systemd、nginx、备份、自检、Windows 备选）。`road.py` 支持 `ROAD_EXPERT_CONFIG`；`road_expert.patch.yml` 补 `tool-bash`/`tool-pwsh` 平台互斥。
+
+| 检查 | 本轮结果与范围 |
+|---|---|
+| `python -X utf8 -m unittest discover -s tests` | 177 项通过（新增 8 项：池化、停止隔离、20 次重建、代理路径、配置优先级、shell 工具平台门控） |
+| `python -X utf8 scripts/check_docs.py` | 通过（23 份文档、99 条链接、版本 0.3.0） |
+| 双访问者并发 | 两个 cookie 各自提问，均得到回答；并发完成 14.1 秒；`/api/health` 显示 `visitors=2, ready=2` |
+| 停止隔离 | A 回答中 B 提问 → B 6.8 秒答完；A 停止后 B 再问 → 1.0 秒答完，B 未受影响 |
+| 模型代理 | `/models` 200；`/v1/messages` 经代理转发成功（dsh 只拿占位 token）；未允许路径 404 |
+| 端到端（经代理） | dsh → 代理 → `api.deepseek.com/anthropic/v1/messages`，回答「测试」；`ROAD_CHAT_PATCH` 生效 |
+
+未验证（不得写成通过）：
+- 服务器脚本没有在本机执行过——本机没有 bash、也没有 WSL，`bash -n` 与 systemd/nginx 配置只能在服务器上验；
+- `guifanchaxun` 在 Linux 上未运行过（首要风险，已写成上线门槛）；
+- 服务器上的隔离实测（`sudo -u` 读他人目录、攻击演练三条）、域名证书、`certbot` 与 nginx SSE 行为；
+- 20 次重建只有单测覆盖，未在真实服务里跑满 20 轮；
+- 夜间重启 timer 未部署验证。
+
+## 2026-11-11：0.2.0 纯聊天前端
+
+用户要求「新的 webui，不显示其他界面，就纯聊天 + 能放图片」。先核对宿主约束：`single` 槽只能有一个占位者、二次注册直接抛错，插件规范禁止替换 app root 与读他人 DOM／样式，CSS modules 类名哈希；因此改为自建前端，取舍见 [ADR 0003](decisions/0003-chat-frontend.md)。
+
+- 新增 `scripts/p3/chat/app.py`：HTTP + SSE 薄服务，驱动 `dsh --profile road-sdk` 的 stdio JSON-RPC（initialize / session/query / session/resume / user-question/ask）；从 `road_expert.patch.yml` 生成 SDK profile 的 patch（部署级 persona + 咨询配置 + 关闭插件管理、计划模式、子代理、定时任务、goal）。
+- 新增 `scripts/p3/chat/page.html`：单文件页面，只有标题、对话、输入框、图片预览与发送；助手回答按持久消息整段出现，提问以卡片形式回答；转录存 localStorage。
+- 模型改走 `deepseek-official` + `DEEPSEEK_API_KEY`（用户已同意按 token 计费）；会话固定 `road-web`，重启前 resume。
+
+| 检查 | 本轮结果与范围 |
+|---|---|
+| `python -X utf8 -m unittest tests.test_p3_chat` | 11 项通过（patch 生成、persona 去缩进、事件取文、key 读取） |
+| `python -X utf8 -m unittest discover -s tests` | 142 项通过 |
+| `python -X utf8 scripts/check_docs.py` | 通过 |
+| 真实一轮（文字） | 「沥青路面网状裂缝先做什么」→ 实际调用 `road.py`、回源 JTG 5142 第 6.1／6.2 节并实际查看渲染页、给出条件化方向与缺口，1669 字 |
+| 真实一轮（图片） | 合成 900×600 路面示意图 → 模型实际描述可见形态、登记 5 条图片观察、拒绝推断病害类型，831 字 |
+| 提问通道 | 首轮咨询中真实收到 `user-question/ask`（3 个问题，含选项），SSE 断开后该轮等待不结束——证明通道生效，也证明未答提问会挂住 |
+
+未验证：浏览器里的实际观感与移动端排版、提问卡片的点击回答过程（只验了服务端收发与挂起）、另一台局域网电脑接入、`export docx` + `delivery-check` 在该前端下的完整交付、Word 实际渲染。服务本身没有登录鉴权。本轮未提交、未推送、未安装依赖、未修改原规范项目。
+
+> 2026-11-11 晚：按用户要求改为「每次进页面都是新对话」——新增 `POST /api/new` 分配会话，页面不再持久化转录（刷新即空白），服务端去掉固定会话与启动 resume。重跑单测与文档检查；页面观感仍未实际查看。
+>
+> 2026-11-11 深夜修复（用户截图反馈「上一轮还在回答，等它结束再发」）：原来一轮对话的锁是**全局一把**，任何一轮卡住（典型是等用户回答提问）就把整个服务卡死。改为按会话隔离的锁，并在开新对话时作废所有进行中的轮次、把旧会话挂起的提问回 `{cancelled: true}`。复现验证：旧会话停在提问等待时，新会话 4.4 秒正常回答「nihao」。同轮发现并修掉两处：① SDK profile 里的 `preset-road` 一直 pending（等 Web 端才有的 `agentPresets` 服务），已从生成的 patch 中移除，启动警告消失；② 自动选监听地址时被 VPN 的 `10.10.1.1` 抢到，改为 `192.168` 优先，避免书签地址漂移。
+>
+> 2026-11-12 清晨：新增双击启动脚本 `启动咨询助手.cmd`（已在运行则直接开页面，否则后台启动并等待就绪）。实测冷启动 75 秒内监听 `192.168.1.5:8091` 且健康检查通过；再次双击 0.3 秒返回「已在运行」。批处理正文改为纯 ASCII——UTF-8 中文在 cmd 的 OEM 代码页下会被误解析成命令。
+>
+> 2026-11-12 上午：界面按 Apple HIG 重做（[ADR 0004](decisions/0004-ui-apple-design.md)）：语义色 token、系统字体、系统蓝、毛玻璃导航与输入栏、iMessage 式气泡、分组卡片式提问、深浅色两套、390px 手机版。用 Chrome headless 截图核对：桌面浅色／深色各一张、390px 宽一张，发现并修掉两处（深色下选项与输入框与卡片同色而隐形；390px 下无横向溢出）。截图仅作观感核对，未在真实 iPhone 或 Safari 上验证；`backdrop-filter`／`color-mix` 有回退但未逐浏览器实测。
+>
+> 2026-11-12 晚：规范引用只写编号、没有规范名称。核查确认两个原因：书架标题是 `154-公路沥青路面养护技术规范-JTG5142-2019` 这种带序号与编号的串，而 `spec-search` 的命中行只带 `book_id`、不带名称；技能与 AGENTS 也没有引用格式要求。修复三层：① `specs.py` 增 `standard_name`／`display_std_no`／`citation_of`，`spec-list`／`spec-search`／`spec-read` 都返回可直接使用的 `citation`（如《公路沥青路面养护技术规范》（JTG 5142—2019）：补字母与数字间空格、还原 JTG/T、年份用破折号）；② SKILL 第 6 步与 AGENTS「咨询与证据」加入「首次出现必须写《全名》（编号，年号）」；③ `delivery_check` 增 `standard_citation_name_missing` 疑点，只查每个标准号的首次出现，后文允许「同规范」或简称。实测同一问题的回答已写成《公路沥青路面养护技术规范》（JTG 5142—2019）第 6.2.7 条。单测 163 项通过（新增 14 项），文档检查通过。
+>
+> 2026-11-12 夜：纯聊天前端加「过程」展示并把正文字号对齐 dsh。后端把 `session.event` 翻译成 `trace` 事件：`user/message` 的注入来源（AGENTS.md／runtime-context／skill-catalog／time-context）→「上下文注入」，`assistant/message` 的 reasoning 块 →「思考」，`tool/call` ＋ `tool/result` →「动作＋目标」并在返回后置为次要态。实测一轮规范查询：`trace` 50 条、`assistant` 1 条、`done` 1 条，内容与 dsh 的过程行一致（加载技能 road-diagnosis、读取 operations.md、运行命令 spec-search…）。字号按 `ui-theme` 的 `--dsh-content-font-size` 默认 14px 重排，ADR 0004 记为该规范里唯一刻意偏离 HIG 的地方。单测 167 项通过（新增 4 项事件翻译），截图复核 `logs\ui-trace.png`；真机与 Safari 仍未验证。
+>
+> 2026-11-12 深夜：过程列表改成可折叠。运行中自动展开并显示「正在执行… 已用 N 秒」，本轮结束（`done` 或错误）折叠为「已完成，用时 X 分 Y 秒」，第二行是「执行了命令 ×2、文件 ×4…」的种类摘要；点标题展开/收起，单条「思考」也可点击从两行展开为全文。前端脚本用 `node --check` 过语法检查，两种状态各截图核对（`logs\ui-trace.png`）；折叠交互与计时未做浏览器自动化点击验证，需在页面上实际点一次。
+>
+> 2026-11-12 深夜（表格）：用户截图指出回答里露出 `|---|---|`。原因是页面排版函数只认标题、列表、粗体、行内代码与代码块，不认 Markdown 表格，于是分隔行原样显示。按真实 `format()` 源码在 Node 里跑样例验证后，补了表格解析（表头 + 分隔行 + 数据行，单元格保留行内粗体/代码）与卡片式样式（表头浅底、行间分隔线、容器随内容收缩、窄屏横向滚动）。截图 `logs\ui-table.png` 复核。仍不处理：有序列表（`1.`）按段落显示，表格内的对齐标记（`:---:`）忽略。
+>
+> 2026-11-12 深夜（输入栏）：① 输入框左侧「＋」与右侧发送键原先比文字低 2px（文本框 36px、按钮 32px 且底对齐），加 `margin-bottom: 2px` 后与文字视觉居中，截图 `logs\ui-composer-zoom.png` 复核。② 增加停止：回答中发送键变方块停止键，`POST /api/stop`。第一次实现只作废本地等待，实测同一会话的下一句会排在后台那一轮之后——**281.7 秒、58k 字**才轮到；改为杀掉运行时并用 `session/resume` 修复被中断的轮次。首版 `kill()` 只杀 `cmd` 外壳，留下 node 孤儿占住会话（日志里出现 EPIPE 与两个运行时并存），改为 `taskkill /T` 杀进程树后：停止在 0.2 秒内断开 SSE，12 秒后同一会话重发 6.4 秒答完，且停止前那句「我的现场编号是 A7」在续问里仍被正确答出，上下文保留。单测 169 项通过（新增停止/重启用例）。
+>
+> 2026-11-12 深夜（滚动）：用户反馈发送后页面不跳到最下面。原因是旧逻辑只在「距底部 160px 内」才滚动，正在看上文时发送就不动。改成记录跟随状态：发送时强制贴底，流式追加只在原本贴底时跟随，手动上翻不打断。验证方式：把页面复制一份、用桩替换 `fetch`，程序化把内容撑到 2400px、滚到顶部后触发表单提交，读回 `scrollTop`——结果 `top=2337 max=2337 atBottom=true`，确实跳到了底部。
+>
+> 2026-11-12 深夜（上下标）：用户截图里表格出现 `L<sub>k</sub>` 原文。模型在回答里写了 HTML 下标，而排版器把 `<` 整体转义成 `&lt;`，标签就成了文字。修复：排版器只放开 `<sub>`／`<sup>` 两种标签（文本仍先整体转义，因此 `<script>`、`<sub><img …></sub>` 等仍按文字显示），行内代码里的标记保持原样，并补了上下标样式。用真实 `format()` 在 Node 里跑了 5 组样例（下标、上标、script、嵌套 img、代码块内标记）确认输出，截图 `logs\ui-sub.png` 复核表格里的 `L_k` 显示。单测仍 169 项通过（本次只改前端，未动 Python）。
+>
+> 2026-11-12 深夜（排版器梳理）：用户问「异常字符是不是没渲染好」，于是把模型输出里会出现的 Markdown 全部跑了一遍审计。原实现只认标题、无序列表、表格、粗体、行内代码、代码块，其余原样显示：有序列表变成段落、`>` 引用露出 `&gt;`、`[文字]（url）` 原样、`---` 显示成三个横线、`~~删除~~` 原样、`- [ ]` 露出方括号、`~~~` 围栏不认、表格里的 `\|` 把单元格切坏、嵌套列表丢层级。重写为更完整的子集：有序／无序列表与嵌套、引用、分隔线、任务列表、`~~~` 围栏、链接与图片降级、斜体、删除线、`<br>` 等白名单标签、表格转义竖线。外链只放行 `http(s)`／`mailto` 且拒绝含引号的 URL，远程图片不自动加载。用真实 `format()` 跑 18 组样例逐条核对输出，整页渲染截图 `logs\ui-render.png`。仍不支持：自定义 HTML 块、公式、脚注、setext 标题、表格列对齐、单元格内多行——清单写进 ADR 0004「渲染能力」。
+
+## 2026-11-11：0.1.9 P3 本机单实例 Web
+
+用户要求「开始 P3，先在这台电脑试，也会用另一台局域网电脑进来」，不使用 Tailscale。范围与取舍见 [ADR 0002](decisions/0002-p3-local-web.md)。
+
+- 新增 `scripts/p3/road_expert.patch.yml`：默认「道路养护专家」preset（persona + 咨询所需工具，不含 bash、计划模式、subagent、schedule、goal、插件管理）；`scripts/p3/local_web.py` 起停独立 home 与端口；`scripts/p3/README.md` 是运维手册。
+- 实例：home `%USERPROFILE%\dsh-roads\home`，默认端口 8090，监听本机局域网 IPv4 `192.168.1.5`；咨询记录仍写 `%LOCALAPPDATA%\RoadMaintenanceExpert\2f50959555be`。3080 开发 GUI 与两个 home 互不影响。
+- 实测并修掉两个坑：`DETACHED_PROCESS` 会让 Node 写到重定向文件的 URL 行丢失，改用 `CREATE_NO_WINDOW|CREATE_NEW_PROCESS_GROUP`；`authorizeIndex` 对回环来源直接放行，所以本机 curl 无法验证 token 交换，必须用另一台机器验。
+- 未复制 3080 的 `.credentials.yaml`：复制后账号路由仍报 `ACCOUNT_SIGN_IN_REQUIRED`（记录里 `payload` 为空），实例首次需自行登录。
+
+| 检查 | 本轮结果与范围 |
+|---|---|
+| `python -X utf8 -m unittest tests.test_p3_local_web` | 14 项通过；仅覆盖启动器纯函数与 preset 文本 |
+| `python -X utf8 -m unittest discover -s tests` | 131 项通过（原 117 项＋14 项） |
+| `python -X utf8 scripts/check_docs.py` | 通过；版本 0.1.9／v1.2 一致 |
+| `python -X utf8 scripts/check_local.py` | 通过（真实规范查询／回源／渲染，合成咨询） |
+| `python -X utf8 scripts/check_trial.py` | 通过（合成问答／恢复／导出／备份；按既定策略清理过期状态） |
+| `python -X utf8 scripts/check_advice.py` | 通过（分领域分析、专项导出、过时拒绝） |
+| `python -X utf8 scripts/check_media_delivery.py` | 通过（合成图片与 Word；不自动渲染查看） |
+| `python -X utf8 scripts/check_delivery.py` | 通过（交付检查、绑定与历史标注） |
+| `local_web.py up` 实机 | 实例在 `192.168.1.5:8090` 监听，日志落出带 token 的 URL，无启动诊断 |
+| `dsh --profile web --dump-config`（该 home） | 组合通过，`preset-road` 与 `default: road` 生效 |
+
+未验证：该实例尚未登录 DeepSeek 账号，模型与图片链路、多轮与恢复、规范回源、Word 导出与 `delivery-check` 都没有在浏览器里实际跑过；另一台局域网电脑的 token 交换、cookie 与访问也未实测。上述任一项未做即保留未验证，不以「服务已监听」代替。本轮未提交、未推送、未安装依赖、未修改原规范项目、未读取 `temp/` 附件。
+
+## 2026-11-05：0.1.8 本地资料库最小版本
+
+> 2026-11-06 用户选择将《道路养护 AI 技术专家——项目总体方案与 Codex 开发交接文档.md》保留在 `docs/`；已同步 AGENTS、README、交接、总方案内部链接及 `check_docs.py` 的产品文档路径，文档检查恢复通过。
+
+按用户决定：规范架继续用 guifanchaxun，不复制规范正文；教材、论文、案例原文统一放 `data/library/`，按页读取和检索；先清空之前收集的全部案例。
+
+- 新增 `library.py` 与 `library-add／list／source／toc／read／search／render／rebuild`：只接收本机绝对路径 PDF，复制到 `data/library/<library_id>/`，生成 `pages.json`、`source.txt`、`source.json`，记录页数、字符数、SHA-256、来源和版权依据；支持按类型／主题列表、字面检索、按页读取、PDF 书签目录和页面渲染。
+- 清理：删除 `data/cases/incoming`、`rejected`、`history`、`sources` 及临时研究目录；`data/cases/index.json` 保留为空。`case-list` 实测 `incoming=0、verified=0、rejected=0`。
+- 迁移：0007 会议论文按 `case_source` 进入资料库，`library_id=CASE-PAV-SUB-0007`，4 页、7962 个正文字符、`printed_page_offset=300`；PDF、文本和分页文本本地保存，`data/library/` 整体 gitignore。
+- 论文：新增 6 篇开放获取论文（`type=paper`，合计 1 个 case_source＋6 篇论文）：
+
+| library_id | 来源 | 页数／正文字符 | 用途 |
+|---|---|---|---|
+| PAPER-PIPELINE-COLLAPSE-2024 | Scientific Reports 14:17717，DOI 10.1038/s41598-024-68824-7 | 16／53601 | 地下管线渗漏诱发塌陷的模型试验机理 |
+| PAPER-KARST-GROUTING-2026 | PLOS ONE 21(5):e0348701，DOI 10.1371/journal.pone.0348701 | 21／51835 | 岩溶地区注浆碎石桩复合地基现场试验 |
+| PAPER-PAVEMENT-RF-2026 | Applied Sciences 16(7):3343，DOI 10.3390/app16073343 | 27／76486 | 高速公路沥青路面养护决策与随机森林 |
+| PAPER-SLOPE-RAIN-2024 | Applied Sciences 14(4):1394，DOI 10.3390/app14041394 | 19／47224 | 降雨条件下顺层边坡失稳案例 |
+| PAPER-BRIDGE-PIER-2025 | IABSE Congress Ghent 2025／arXiv:2508.17110 | 8／23017 | 砌体桥墩缺陷监测、评估与数值分析 |
+| PAPER-BRIDGE-SCOUR-2025 | ICSE-12（ISSMGE 公开论文） | 16／21408 | 局部冲刷导致桥墩安全渐进降低案例 |
+
+- 资料库当前 7 条：1 条 `case_source`＋6 篇论文；没有教材。`library-search` 按标题命中优先、每个来源最多 2 条摘录返回；实测 `scour` 先返回桥墩冲刷论文，`karst` 先返回岩溶注浆论文，`rainfall` 先返回边坡降雨论文。
+
+| 检查 | 本轮结果与范围 |
+|---|---|
+| `python -X utf8 -m unittest discover -s tests` | 117 项通过（原 112 项＋5 项资料库回归），退出 0 |
+| `python -X utf8 scripts/check_docs.py` | 19 份 Markdown、70 条本地链接通过；版本 0.1.8／v1.2 一致 |
+| `python -X utf8 scripts/check_local.py` | 通过；真实规范查询／回源／渲染、空案例、多轮、备份恢复 |
+| `python -X utf8 scripts/check_trial.py` | 通过；合成问答／关闭／复述／导出／备份恢复 |
+| `python -X utf8 scripts/check_advice.py` | 通过；3 个分析模板、9 份专项导出及过时拒绝 |
+| `python -X utf8 scripts/check_delivery.py` | 通过；检查范围、过时拒绝、历史标注、绑定及 Word 校验 |
+| `python -X utf8 scripts/check_media_delivery.py` | 通过；2 张合成图、副本清理、原图不变 |
+| 技能结构校验 | Skill is valid |
+
+未验证：资料库 7 条中 6 篇为英文开放获取论文，尚无教材；PDF 文本层、表格、公式、扫描页未系统测试；`library-search` 为字面检索，不做同义词、语义排序或 OCR；`library-render` 未做实际逐页查看。论文的工程适用性、数据和结论未独立复核；资料原文不是规范或审核结论，不能替代 case_refs、规范回源或专业审核。本轮未提交、未推送、未安装依赖、未修改原规范项目、未读取 `temp/` 附件。
+
+## 2026-11-05：0.1.7 路面沉陷候选案例库（专业资料）
+
+> 2026-11-05 晚用户要求清理全部案例；本节所述 5 条案例及原文副本已删除，保留记录用于历史审计。当前案例库为空；0007 原文已迁入 `data/library/` 作为 `case_source`。
+
+本轮先做路面沉陷案例库：新增 `case-list`、`case-show`、`case-source`、`case-source-read`、`case-source-search`、`case-search scope=candidate/all`、`case-reject`，并在 `answer.case_refs` 与交付检查中阻止候选案例进入引用。首轮导入的 5 条新闻／政务报道因缺少检测、监测或试验数据，已按“专业性不足”拒绝并保留记录；随后导入 5 条专业资料候选案例（`incoming`，`pending_review`）。0007 的全文（PDF、文本、分页、SHA-256）存到 `data/cases/sources/CASE-PAV-SUB-0007/`，该目录已 gitignore，仅本地使用。可引用 `verified` 库仍为空，本轮没有做人工专业审核。
+
+| case_id | 来源 | 等级 | 要点 |
+|---|---|---|---|
+| CASE-PAV-SUB-0001 | [城市道桥与防洪 2025(10):42-46](http://csdqyfh.ijournals.cn/csdqyfh/article/abstract/250160) | S2（摘要） | 四川水库影响区；厚层粉土、破损暗沟渗流、水库水位与污水抽排 |
+| CASE-PAV-SUB-0007 | [8iYGEC 会议论文（TU Graz 仓库）](https://repository.tugraz.at/publications/marc21/jmnxa-vj417/files/8iYGEC_Paper_ID_73_Canto.pdf?download=1) | S2（全文） | 南非 N1 公路白云岩塌陷；深部岩溶沟槽、岩面热力图、300m×10m 压密注浆网格 |
+| CASE-PAV-SUB-0008 | [工业建筑 2025,55(12):167-172](http://gyjz.ic-mag.com/cn/article/doi/10.3724/j.gyjzG25031002) | S2（摘要） | 西南某市管网渗漏地面塌陷；管-井侵蚀空洞、四阶段演化 |
+| CASE-PAV-SUB-0009 | [交通科技 2024(6)](https://wap.cnki.net/touch/web/Journal/Article/SKQB202406009.html) | S2（摘要） | 城市道路岩溶地基；深溶洞袖阀管注浆、洞顶高压旋喷、浅土洞明挖回填；监测达标 |
+| CASE-PAV-SUB-0010 | [热带地理 2021,41(4)](https://cnki.sris.com.tw/KCMS/detail/detail.aspx?filename=RDDD202104014&dbcode=CJFD&dbname=CJFD2021) | S2（摘要） | 广州夏茅村覆盖型岩溶塌陷；土洞、地下水位、钻孔桩触发；地下水监测＋灌浆 |
+
+已拒绝的 5 条（CASE-PAV-SUB-0002～0006）均为新闻或政务报道，S3，缺少检测、监测或试验数据；拒绝原因保存在 `data/cases/rejected/`，旧版本在 `history/`。它们不再参与候选检索，也不进入 `verified`。
+
+候选案例文件在 `data/cases/incoming/`；`case-list` 可看摘要、来源和全文可用性，`case-show` 看全文，`case-search scope=candidate` 返回最多 3 条并标记 `unverified_candidate`，排序先精确标签、后同义词匹配。候选不进入派生索引，不能写入 `case_refs`。0007 可用 `case-source` 看元数据（4 页、8050 字符、全文），`case-source-read` 按页读取，`case-source-search` 字面检索；其余 4 条 `case-source` 返回 `available=false`、`abstract_only`。
+
+| 检查 | 本轮结果与范围 |
+|---|---|
+| `python -X utf8 -m unittest discover -s tests` | 112 项通过（原 104 项＋8 项候选／全文来源回归），退出 0 |
+| `python -X utf8 scripts/check_docs.py` | 19 份 Markdown、70 条本地链接通过；版本 0.1.7／v1.2 一致 |
+| `python -X utf8 scripts/check_local.py` | 通过；真实规范查询／回源／渲染、空可引用案例、多轮、备份恢复 |
+| `python -X utf8 scripts/check_trial.py` | 通过；合成问答／关闭／复述／导出／备份恢复 |
+| `python -X utf8 scripts/check_advice.py` | 通过；3 个分析模板、9 份专项导出及过时拒绝 |
+| `python -X utf8 scripts/check_delivery.py` | 通过；检查范围、过时拒绝、历史标注、绑定及 Word 校验 |
+| `python -X utf8 scripts/check_media_delivery.py` | 通过；2 张合成图、副本清理、原图不变 |
+| 技能结构校验 | Skill is valid |
+
+候选案例计数：`incoming=5`、`verified=0`、`rejected=5`；其中 1 条有本地全文（0007，4 页），4 条仅摘要。按标签“沉陷”查候选返回 3 条（上限），默认 `verified` 查询返回 `no_qualified_cases`。
+
+未验证：5 条候选均未经人工专业审核；0007 已读会议论文全文并保存本地副本，其余 4 条仅读公开摘要，未取得全文；摘要级案例缺少完整设计参数、检测数据和长期复查；病因、处治和结果沿用来源，未独立核实；0009 仅有短期监测结果。全文副本仅本地、已 gitignore，版权和许可由使用者核对；`case-source-read/search` 不解析图表、扫描件或 OCR，不证明原文支持当前判断。没有真实弹窗、Word 渲染或工程专业评价。候选案例不能替代机理库、规范判断或现场核查。本轮未提交、未推送、未安装依赖、未修改原规范项目、未读取 `temp/` 附件。
+
+## 2026-11-04：0.1.6 问题决策影响（B4）
+
+本轮只实现 B4：待答问题逐题记录 `decision_impact`，写明不同答案会改变什么判断或下一步；没有实现来源状态、检索日志、交接结构等其他建议，也没有改变风险规则、知识卡或案例库。
+
+- `question-ask` 现在要求 `decision_impact` 与 fields 一一对应，缺失、错位、空文本均拒绝且不写入；`briefing.next_questions` 返回通用默认提示，模型须结合本例改写。
+- 旧式 `answer.questions` 未提供时使用该字段的默认答案影响；报告“信息缺口与追问”和续办摘要显示该文本。旧记录无需迁移。
+- 程序只检查字段完整性、对应关系和长度，不验证分支是否正确、问题是否最优，也不是定量信息价值。
+
+| 检查 | 本轮结果与范围 |
+|---|---|
+| `python -X utf8 -m unittest discover -s tests` | 104 项通过（原 101 项＋3 项决策影响回归），退出 0 |
+| `python -X utf8 scripts/check_docs.py` | 19 份 Markdown、70 条本地链接通过；版本 0.1.6／v1.2 一致 |
+| `python -X utf8 scripts/check_local.py` | 通过；真实规范查询／回源／渲染、空案例、多轮、备份恢复；上游 4 个文件指纹不变 |
+| `python -X utf8 scripts/check_trial.py` | 通过；合成问答／关闭／复述／导出／备份恢复；默认库清理后现存会话 0 |
+| `python -X utf8 scripts/check_advice.py` | 通过；3 个分析模板、9 份专项导出及过时拒绝 |
+| `python -X utf8 scripts/check_delivery.py` | 通过；检查范围、过时拒绝、历史标注、绑定及 Word 校验 |
+| `python -X utf8 scripts/check_media_delivery.py` | 通过；2 张合成图、副本清理、原图不变 |
+| 技能结构校验 | Skill is valid |
+
+默认库中原有 1 个 2026-11-02 写入、已于 2026-11-04 07:35（+08）过期的临时会话及孤立证据；按既定策略在 `check_trial.py` 的首次默认调用中被清理，未手工删除有效记录。五套集成均返回 `artifacts_retained=false`。
+
+未验证：真实弹窗显示与真人提交、Word 实际渲染逐页核对、工程专业审核、问题选择质量。决策影响文本由宿主撰写，程序不证明其正确。本轮未提交、未推送、未安装依赖、未修改原规范项目、未读取 `temp/` 附件。
+
 ## 2026-11-02：文档修复与精简
 
 保留中文文件名 docs/交接.md，修复旧链接及接手模板；总方案集中目标、需求和阶段路线，AGENTS 集中执行约束，README 集中用户用法，交接集中当前版本、环境和近期三项任务。模块入口移至架构，历史测试和清理细节留在本文件。候选任务补充范围、验收及依赖，不作为本轮新功能授权。

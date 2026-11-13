@@ -41,7 +41,8 @@ def run_checks(store):
                         {"field": "rain", "value": "雨后"},
                         {"field": "progression", "value": "是否扩大不清楚", "state": "unknown"}]})["session"]
     sid, revision = s["id"], s["revision"]
-    asked = call({"op": "question-ask", "session_id": sid, "base_revision": revision, "fields": ["traffic"]})
+    asked = call({"op": "question-ask", "session_id": sid, "base_revision": revision, "fields": ["traffic"],
+                  "decision_impact": {"traffic": "合成影响：若仍通行先管控，若已封闭转核查，不清楚按暴露处理"}})
     revision, q = asked["session_revision"], asked["questions"][0]
     recovered = call({"op": "resume", "session_id": sid})
     assert recovered["resume_summary"]["pending_questions"][0]["id"] == q["id"]
@@ -81,7 +82,8 @@ def run_checks(store):
     revision = call({"op": "answer", "session_id": sid, "base_revision": revision, "answer": answer})["session_revision"]
     summary = call({"op": "resume", "session_id": sid})["resume_summary"]
     assert summary["opinion_changes"]["summary_changed"] and not summary["latest_opinion"]["stale"]
-    asked = call({"op": "question-ask", "session_id": sid, "base_revision": revision, "fields": ["drainage"]})
+    asked = call({"op": "question-ask", "session_id": sid, "base_revision": revision, "fields": ["drainage"],
+                  "decision_impact": {"drainage": "合成影响：有水路线索则优先核查水相关机理，无线索仍保留隐蔽水路待查"}})
     revision = call({"op": "question-close", "session_id": sid, "base_revision": asked["session_revision"],
                      "question_ids": [asked["questions"][0]["id"]], "reason": "合成模拟用户跳过"})["session_revision"]
     final = call({"op": "resume", "session_id": sid})
