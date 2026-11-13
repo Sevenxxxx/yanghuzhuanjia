@@ -23,7 +23,7 @@ check() {
 
 echo "== 1. 程序 =="
 check "dsh 已安装" dsh --version
-check "node >= 20" node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)'
+check "node >= 24.9（dsh 的 engines 要求）" node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>24||(a===24&&b>=9)?0:1)'
 check "python 依赖（pymupdf / pillow）" python3 -c 'import fitz, PIL'
 
 echo "== 2. 项目工具（以 ${SERVICE_USER} 身份）=="

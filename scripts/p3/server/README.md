@@ -9,7 +9,7 @@
 
 | # | 东西 | 从哪来 | 大小 | 注意 |
 |---|---|---|---|---|
-| 1 | Node 20 + `@deepseek-ai/dsh` | `bootstrap-linux.sh` 自动装（npm 全局） | 数百 MB | Ubuntu 自带的 Node 是 18，不够；不要用 `apt install dsh`（不存在） |
+| 1 | Node 24 + `@deepseek-ai/dsh` | `bootstrap-linux.sh` 自动装（npm 全局） | 数百 MB | **dsh 要求 node ≥ 24.9.0**（Node 20 已 EOL，装上也跑不起来）；不要用 `apt install dsh`（不存在） |
 | 2 | `guifanchaxun` 工具 | `git clone`（远程 `Sevenxxxx/guifanchaxun`） | 约 20 MB | clone 只有代码 |
 | 2a | 规范 PDF 原件 `guifansrc/` | **单独 rsync** | **3.79 GB** | 被 gitignore，不在仓库里 |
 | 2b | 索引 `library_data/` | **单独 rsync** | **0.42 GB** | 也不在 git 里 |
@@ -28,7 +28,7 @@
 sudo APP_DIR=/srv/road/app bash scripts/p3/server/bootstrap-linux.sh
 ```
 
-装好 Python、Node 20、`@deepseek-ai/dsh`、nginx、certbot、`roadchat` 用户与目录。
+装好 Python、Node 24、`@deepseek-ai/dsh`、nginx、certbot、`roadchat` 用户与目录。
 
 ## 2. 放仓库与规范库
 

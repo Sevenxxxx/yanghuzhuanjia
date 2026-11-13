@@ -18,7 +18,7 @@ Linux 是主路径；如果最终买了 Windows Server，按下面的差异执�
 
 ## 步骤
 
-1. 安装 Node 20、Python 3.12（勾选 Add to PATH）、Git。
+1. 安装 Node 24（dsh 要求 ≥ 24.9.0）、Python 3.12（勾选 Add to PATH）、Git。
 2. `npm i -g @deepseek-ai/dsh`，`dsh --version`。
 3. `New-LocalUser roadchat -NoPassword`（或设强口令），建 `C:\road\{app,specs,work}`，
    `icacls` 收紧：work 只给 roadchat 完全控制，app/specs 只读。

@@ -8,7 +8,8 @@ SPEC_DIR="${SPEC_DIR:-/srv/road/specs}"
 WORK_DIR="${WORK_DIR:-/srv/road/work}"
 ETC_DIR="${ETC_DIR:-/etc/road-chat}"
 SERVICE_USER="${SERVICE_USER:-roadchat}"
-NODE_MAJOR="${NODE_MAJOR:-20}"
+# dsh 的 engines 要求 node >= 24.9.0；Node 20 已于 2026-04-30 停止安全更新
+NODE_MAJOR="${NODE_MAJOR:-24}"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "请用 root 运行" >&2
