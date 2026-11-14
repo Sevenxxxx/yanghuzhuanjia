@@ -20,7 +20,12 @@ Linux 那套（`bootstrap-linux.sh` / `install-app.sh`）在 Windows 上不能�
 ## 步骤
 
 ```powershell
-# 0. 以管理员身份打开 PowerShell
+# 0. 先填配置：仓库根的 deploy.example.json 复制成 deploy.json
+#    password / api_key / domain 都在里面；deploy.json 不会提交
+Copy-Item deploy.example.json deploy.json
+notepad deploy.json
+
+# 以管理员身份打开 PowerShell
 Set-ExecutionPolicy -Scope Process Bypass -Force
 
 # 1. 系统层（一次）
@@ -32,14 +37,14 @@ cd C:\road\server
 #    C:\road\specs\guifanchaxun ← 工具 + guifansrc + library_data
 
 # 3. 配置 + 服务
-.\install-chat.ps1 -ApiKey 'sk-真实key'
+.\install-chat.ps1   # key、端口、域名、路径全部来自 deploy.json
 
 # 4. 门槛
 .\acceptance.ps1
 ```
 
 全部 ✓ 之后，用 `https://<公网IP>:8443/` 试用（自签证书，浏览器提示不安全点继续）。
-域名备案下来后，重跑 `.\install-chat.ps1 -ApiKey ... -Domain road.example.com`，Caddy 自动申请证书。
+域名备案下来后，重跑 `.\install-chat.ps1`（先把 `deploy.json` 的 `domain` 填上），Caddy 自动申请证书。
 
 ## 目录与账户
 

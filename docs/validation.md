@@ -2,6 +2,21 @@
 
 本文件集中维护有日期的验证和历史处理记录；最新复验置于最前。旧路径、旧测试数量和历史人工查看不能作为新版本验证。运行命令与接手入口见 [交接.md](交接.md)。
 
+## 2026-11-14（夜）：手填项集中到根目录 deploy.json
+
+用户希望口令、API key 这类手填值只有一个位置。新增根目录 [deploy.example.json](../deploy.example.json)（入库），复制成 `deploy.json` 后填写；`deploy.json` 已进 `.gitignore`，不入库、不推送。
+
+接入方式：聊天服务新增 `--config`（`启动咨询助手.cmd` 自动带 `deploy.json`）；`install-chat.ps1` 从同一个文件取 `api_key`、`password`、`domain`、端口、路径与账户，缺 key 时直接报错并提示位置。
+
+| 检查 | 结果 |
+|---|---|
+| 单测 | 新增 deploy 形状配置用例，187 项通过 |
+| 端到端 | 用 `deploy.json`（password=test123）起服务：输 `yhg` → 401，输 `test123` → 200 |
+| 文件安全 | `git check-ignore deploy.json` 命中；`deploy.example.json` 才入库 |
+| PS 脚本 | 改后仍通过 PowerShell 5.1 解析（BOM 保留） |
+
+未验证：Windows Server 上 `install-chat.ps1` 从 `deploy.json` 读值并写 env 的完整链路。
+
 ## 2026-11-14（晚）：改用 Windows Server 2022，补 PowerShell 部署套件
 
 用户把服务器系统改成 Windows Server 2022，原先只写了 Linux 脚本。补三支 PowerShell：

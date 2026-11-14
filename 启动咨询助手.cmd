@@ -58,5 +58,7 @@ if not errorlevel 1 set "URL=!CANDIDATE!"
 goto :eof
 
 :run
-python -X utf8 scripts\p3\chat\app.py >> "%LOG%" 2>&1
+set "CONFIG="
+if exist "deploy.json" set "CONFIG=--config deploy.json"
+python -X utf8 scripts\p3\chat\app.py %CONFIG% >> "%LOG%" 2>&1
 exit /b

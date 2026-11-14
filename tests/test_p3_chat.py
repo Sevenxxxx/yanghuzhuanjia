@@ -111,6 +111,16 @@ class PasswordTests(unittest.TestCase):
             path.write_text('{"password": ""}', encoding="utf-8")
             self.assertEqual(app.resolve_password(path, None), "")
 
+    def test_deploy_shaped_config_reads_only_password(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "deploy.json"
+            path.write_text(
+                '{"_说明":"提示","password":"deploy-pass","api_key":"sk-x","chat_port":8091,'
+                '"paths":{"app":"C:/road/app"}}',
+                encoding="utf-8",
+            )
+            self.assertEqual(app.resolve_password(path, None), "deploy-pass")
+
     def test_utf8_bom_file_is_accepted(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "config.json"

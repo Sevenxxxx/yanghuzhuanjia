@@ -23,10 +23,12 @@
 python -X utf8 scripts/p3/chat/app.py
 ```
 
-- **访问口令**：第一次打开是登录页，默认口令 `yhg`。改 [config.json](chat/config.json) 的
-  `password` 即可；把它写成 `""` 就不需要口令。环境变量 `ROAD_CHAT_PASSWORD` 优先级更高
-  （服务器用它，空值表示不设口令）。登录后 7 天内免输入，密钥存在 `dsh-roads/auth.key`，
-  重启不失效。同一 IP 一分钟内错 5 次会被挡 429。
+- **访问口令**：第一次打开是登录页，默认口令 `yhg`。口令与 API key 等需要手填的东西集中在仓库根的
+  [deploy.example.json](../../deploy.example.json)：复制成 `deploy.json` 再填（该文件已被 gitignore）。
+  本机的启动脚本会自动带 `--config deploy.json`；服务器上的 `install-chat.ps1` 也从这里读。
+  不想用这个文件时，仍可改 [config.json](chat/config.json)；写成 `""` 表示不设口令。
+  环境变量 `ROAD_CHAT_PASSWORD` 优先级最高。登录后 7 天内免输入，密钥存在 `dsh-roads/auth.key`，
+  重启不失效；同一 IP 一分钟内错 5 次会被挡 429。
 - 默认端口 8091，监听本机局域网 IPv4；本机也用它打开，`127.0.0.1:8091` 连不上。
 - **按访问者隔离运行时**：服务端给每个浏览器下发 `rc_vid` cookie，每个访问者一个独立
   dsh 运行时，数据在 `%USERPROFILE%\dsh-roads\visitors\<id>\`（`home` 是 DSH_HOME，

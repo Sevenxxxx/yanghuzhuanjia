@@ -18,6 +18,24 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
+$ConfigPath = Join-Path $RepoRoot 'deploy.json'
+if (Test-Path $ConfigPath) {
+    $Deploy = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Write-Host "使用配置：$ConfigPath" -ForegroundColor DarkGray
+} else {
+    $Deploy = $null
+}
+
+if ($Deploy) {
+    if ($Deploy.paths.app) { $AppDir = $Deploy.paths.app }
+    if ($Deploy.paths.specs) { $SpecDir = $Deploy.paths.specs }
+    if ($Deploy.paths.work) { $WorkDir = $Deploy.paths.work }
+    if ($Deploy.paths.etc) { $EtcDir = $Deploy.paths.etc }
+    if ($Deploy.paths.node_global) { $NodeGlobal = $Deploy.paths.node_global }
+    if ($Deploy.service_user) { $ServiceUser = $Deploy.service_user }
+}
+
 function Step([string]$text) { Write-Host "`n== $text ==" -ForegroundColor Cyan }
 function Refresh-Path {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -101,7 +119,7 @@ Write-Host @"
 
 系统层完成。接下来：
   1. 把仓库放到 $AppDir，规范库放到 $SpecDir\guifanchaxun（含 guifansrc 与 library_data）
-  2. 写 $EtcDir\ 下的 config.json、roadchat.env、proxy.env、proxy.patch.yml（模板见 scripts\p3\server\README.md）
+  2. 仓库根目录的 deploy.json 已填好（password / api_key / domain 都在那里）
   3. 管理员 PowerShell 执行 .\install-chat.ps1
   4. 执行 .\acceptance.ps1 过门槛
 "@ -ForegroundColor Green

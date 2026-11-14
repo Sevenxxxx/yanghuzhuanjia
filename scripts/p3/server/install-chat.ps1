@@ -7,7 +7,7 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$ApiKey,
+    [string]$ApiKey = '',
     [string]$Domain = '',
     [string]$AppDir = 'C:\road\app',
     [string]$WorkDir = 'C:\road\work',
@@ -19,7 +19,33 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
+$ConfigPath = Join-Path $RepoRoot 'deploy.json'
+if (Test-Path $ConfigPath) {
+    $Deploy = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Write-Host "使用配置：$ConfigPath" -ForegroundColor DarkGray
+} else {
+    $Deploy = $null
+}
+
 function Step([string]$text) { Write-Host "`n== $text ==" -ForegroundColor Cyan }
+
+if ($Deploy) {
+    if ($Deploy.paths.app) { $AppDir = $Deploy.paths.app }
+    if ($Deploy.paths.work) { $WorkDir = $Deploy.paths.work }
+    if ($Deploy.paths.etc) { $EtcDir = $Deploy.paths.etc }
+    if ($Deploy.paths.specs) { $SpecDir = $Deploy.paths.specs }
+    if ($Deploy.service_user) { $ServiceUser = $Deploy.service_user }
+    if ($Deploy.chat_port) { $ChatPort = [int]$Deploy.chat_port }
+    if ($Deploy.proxy_port) { $ProxyPort = [int]$Deploy.proxy_port }
+    if ($Deploy.domain) { $Domain = $Deploy.domain }
+    if (-not $ApiKey -and $Deploy.api_key) { $ApiKey = $Deploy.api_key }
+    $GatePassword = if ($null -ne $Deploy.password) { [string]$Deploy.password } else { 'yhg' }
+} else {
+    $GatePassword = 'yhg'
+}
+if (-not $ApiKey) { throw '没有 API key：在 deploy.json 里填 api_key，或用 -ApiKey 传入' }
+if ($ApiKey -notmatch '^sk-') { throw "api_key 看起来不像真的（当前：$($ApiKey.Substring(0, [Math]::Min(6, $ApiKey.Length)))…）" }
 
 foreach ($path in @("$AppDir\scripts\p3\chat\app.py", "$AppDir\scripts\p3\proxy\model_proxy.py")) {
     if (-not (Test-Path $path)) { throw "缺少 $path；先把仓库放到 $AppDir" }
@@ -42,7 +68,7 @@ Set-Content -Path (Join-Path $EtcDir 'roadchat.env') -Encoding utf8 -Value @(
     'DEEPSEEK_API_KEY=proxy-held'
     "ROAD_CHAT_PATCH=$EtcDir\proxy.patch.yml"
     "ROAD_EXPERT_CONFIG=$EtcDir\config.json"
-    'ROAD_CHAT_PASSWORD=yhg'
+    "ROAD_CHAT_PASSWORD=$GatePassword"
 )
 Set-Content -Path (Join-Path $EtcDir 'proxy.env') -Encoding utf8 -Value "DEEPSEEK_API_KEY=$ApiKey"
 Set-Content -Path (Join-Path $EtcDir 'proxy.patch.yml') -Encoding utf8 -Value @(

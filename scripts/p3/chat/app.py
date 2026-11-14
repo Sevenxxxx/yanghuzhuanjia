@@ -1088,6 +1088,7 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"端口，默认 {DEFAULT_PORT}")
     parser.add_argument("--host", help="监听地址，默认本机局域网 IPv4，取不到则 127.0.0.1")
     parser.add_argument("--print-url", action="store_true", help="只打印访问地址后退出")
+    parser.add_argument("--config", help="配置文件路径（默认 scripts/p3/chat/config.json；可指向仓库根的 deploy.json）")
     args = parser.parse_args(argv)
 
     host = args.host or pick_lan_address(local_addresses()) or "127.0.0.1"
@@ -1098,7 +1099,8 @@ def main(argv=None):
 
     root = Path(args.home)
     root.mkdir(parents=True, exist_ok=True)
-    password = resolve_password(HERE / "config.json", os.environ.get("ROAD_CHAT_PASSWORD"))
+    config_path = Path(args.config) if args.config else HERE / "config.json"
+    password = resolve_password(config_path, os.environ.get("ROAD_CHAT_PASSWORD"))
     Handler.password = password
     Handler.secret = auth_secret(root) if password else ""
     service = ChatService(root, read_api_key(root))

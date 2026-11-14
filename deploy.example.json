@@ -1,0 +1,16 @@
+{
+  "_说明": "复制成 deploy.json 再填。deploy.json 已在 .gitignore 里，不会提交，也不会出现在任何推送。password 留空表示打开页面不要口令；api_key 只写真实 key，服务器上它只会被写进 proxy.env（ACL 仅管理员可读）。domain 留空时先用 https://公网IP:8443 自签证书。",
+  "password": "yhg",
+  "api_key": "sk-替换成你的 key",
+  "domain": "",
+  "chat_port": 8091,
+  "proxy_port": 8096,
+  "service_user": "roadchat",
+  "paths": {
+    "app": "C:\\road\\app",
+    "specs": "C:\\road\\specs",
+    "work": "C:\\road\\work",
+    "etc": "C:\\road\\etc",
+    "node_global": "C:\\road\\node-global"
+  }
+}
