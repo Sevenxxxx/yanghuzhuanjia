@@ -93,12 +93,36 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
     } catch { $needPython = $true }
 }
 if ($needPython) {
-    $html = (Invoke-WebRequest 'https://www.python.org/ftp/python/' -UseBasicParsing -TimeoutSec 30).Content
-    $versions = [regex]::Matches($html, 'href="(3\.12\.\d+)/"') | ForEach-Object { [version]$_.Groups[1].Value }
-    $latest = ($versions | Sort-Object -Descending | Select-Object -First 1).ToString()
+    # 3.12 的后续版本有的只发源码包（没有 -amd64.exe），逐个用 HEAD 探测，取最新的带安装包的
+    $candidates = @()
+    try {
+        $html = (Invoke-WebRequest 'https://www.python.org/ftp/python/' -UseBasicParsing -TimeoutSec 30).Content
+        $candidates = [regex]::Matches($html, 'href="(3\.12\.\d+)/"') |
+            ForEach-Object { $_.Groups[1].Value } |
+            Sort-Object { [version]$_ } -Descending
+    } catch {
+        Write-Host '读取 python.org 版本列表失败，改用已知版本' -ForegroundColor DarkYellow
+    }
+    $candidates = @($candidates) + @('3.12.10', '3.12.9', '3.12.8')
+
+    $installerUrl = $null
+    $latest = $null
+    foreach ($version in ($candidates | Select-Object -Unique)) {
+        $url = "https://www.python.org/ftp/python/$version/python-$version-amd64.exe"
+        try {
+            $head = Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30
+            if ($head.StatusCode -eq 200) { $installerUrl = $url; $latest = $version; break }
+        } catch {
+            continue
+        }
+    }
+    if (-not $installerUrl) {
+        throw 'python.org 上没有找到带 Windows 安装包的 3.12 版本；请手动安装 Python 3.12 后重跑本脚本'
+    }
+
     $exe = Join-Path $env:TEMP "python-$latest-amd64.exe"
     Write-Host "下载 Python $latest"
-    Invoke-WebRequest "https://www.python.org/ftp/python/$latest/python-$latest-amd64.exe" -OutFile $exe -TimeoutSec 300
+    Invoke-WebRequest $installerUrl -OutFile $exe -TimeoutSec 600
     Start-Process $exe -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1' -Wait
     Refresh-Path
 }
@@ -106,14 +130,18 @@ Write-Host "python $(python --version 2>&1)"
 
 Step 'Git（后面用 git clone 拉仓库与规范工具）'
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    $release = Invoke-RestMethod 'https://api.github.com/repos/git-for-windows/git/releases/latest' -TimeoutSec 30
-    $asset = $release.assets | Where-Object { $_.name -match '^Git-.*-64-bit\.exe$' } | Select-Object -First 1
-    if (-not $asset) { throw '找不到 Git for Windows 安装包' }
-    $installer = Join-Path $env:TEMP $asset.name
-    Write-Host "下载 $($asset.name)"
-    Invoke-WebRequest $asset.browser_download_url -OutFile $installer -TimeoutSec 600
-    Start-Process $installer -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP-' -Wait
-    Refresh-Path
+    try {
+        $release = Invoke-RestMethod 'https://api.github.com/repos/git-for-windows/git/releases/latest' -TimeoutSec 30
+        $asset = $release.assets | Where-Object { $_.name -match '^Git-.*-64-bit\.exe$' } | Select-Object -First 1
+        if (-not $asset) { throw '发布页里没有 64 位安装包' }
+        $installer = Join-Path $env:TEMP $asset.name
+        Write-Host "下载 $($asset.name)"
+        Invoke-WebRequest $asset.browser_download_url -OutFile $installer -TimeoutSec 600
+        Start-Process $installer -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP-' -Wait
+        Refresh-Path
+    } catch {
+        throw "自动安装 Git 失败（$($_.Exception.Message)）。手动装好后重跑：https://git-scm.com/download/win"
+    }
 }
 Write-Host "git $(git --version)"
 
