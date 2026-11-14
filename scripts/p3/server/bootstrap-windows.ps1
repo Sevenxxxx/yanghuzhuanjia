@@ -181,7 +181,7 @@ Ensure-Rule 'RoadChat 443（域名）' 443
 
 Step '系统检查：Defender 排除与页面文件'
 if (Get-Command Add-MpPreference -ErrorAction SilentlyContinue) {
-    foreach ($exclusion in @($WorkDir, $AppDir)) {
+    foreach ($exclusion in @($WorkDir, $AppDir, $SpecDir)) {
         if (Test-Path $exclusion) {
             try {
                 Add-MpPreference -ExclusionPath $exclusion -ErrorAction Stop

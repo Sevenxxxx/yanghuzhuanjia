@@ -126,7 +126,7 @@ cd C:\road
 
 它会做：校验 Node（服务器自备）、装 Git、Python 3.12、PyMuPDF/Pillow；
 建 `roadchat` 账户（口令写在 `C:\road\etc\roadchat-password.txt`）；收紧 ACL；放行 Windows 防火墙 80/443/8443；
-最后做两项系统检查——给 `C:\road\work`、仓库目录加 Defender 排除，检查页面文件是否 ≥ 4GB（不够会提示怎么设）。
+最后做两项系统检查——给 `C:\road\work`、仓库目录、规范库目录加 Defender 排除，检查页面文件是否 ≥ 4GB（不够会提示怎么设）。
 
 **做完应该看到**：
 

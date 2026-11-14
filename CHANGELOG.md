@@ -3,6 +3,11 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.6（2026-11-15）
+
+- `bootstrap-windows.ps1` 的 Defender 排除增加**规范库目录**（`Desktop\guifanchaxun`），
+  避免首次读取/渲染 3.79GB PDF 时被实时扫描拖慢。
+
 ## 0.4.5（2026-11-15）
 
 - 修复部署脚本：Python 3.12 的部分后续版本只发源码包（没有 `-amd64.exe`），原逻辑固定取最新版会 404。
