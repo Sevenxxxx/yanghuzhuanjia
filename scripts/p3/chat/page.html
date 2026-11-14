@@ -78,6 +78,7 @@
     border-bottom: 1px solid var(--separator);
   }
   .masthead-inner {
+    position: relative;
     max-width: var(--max);
     margin: 0 auto;
     height: var(--nav-height);
@@ -86,6 +87,29 @@
     justify-content: center;
     padding: 0 16px;
   }
+  .new-chat {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 28px;
+    padding: 0 12px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 28px;
+    color: var(--blue);
+    background: var(--fill-4);
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .new-chat:hover { background: var(--fill-3); }
+  .new-chat:active { background: var(--fill-3); opacity: 0.65; }
+  .new-chat:disabled { opacity: 0.4; cursor: default; }
+  .new-chat:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   h1 {
     margin: 0;
     font-size: 15px;
@@ -517,6 +541,7 @@
 <header class="masthead">
   <div class="masthead-inner">
     <h1>道路养护咨询助手</h1>
+    <button class="new-chat" id="newChat" type="button">新对话</button>
   </div>
 </header>
 
@@ -574,6 +599,35 @@
   let statusRow = null;
   let traceBox = null;
   let sessionId = null;
+
+  const newChatBtn = document.getElementById('newChat');
+
+  // 新对话：停掉正在进行的回答，清空页面，向服务要一个新会话
+  async function startNewChat() {
+    if (busy) stopTurn();
+    newChatBtn.disabled = true;
+    try {
+      const fresh = await apiJson('/api/new', { method: 'POST' });
+      sessionId = fresh.sessionId;
+      transcript = [];
+      images = [];
+      statusRow = null;
+      traceBox = null;
+      userStopped = false;
+      setBusyMode(false);
+      setStatus('');
+      showError('');
+      renderThumbs();
+      render();
+      input.value = '';
+      input.focus();
+    } catch (error) {
+      showError(error.message || String(error));
+    } finally {
+      newChatBtn.disabled = false;
+    }
+  }
+  newChatBtn.addEventListener('click', startNewChat);
 
   const SEND_ICON = sendBtn.innerHTML;
   const STOP_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
