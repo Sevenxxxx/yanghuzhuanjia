@@ -73,6 +73,19 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 }
 Write-Host "python $(python --version 2>&1)"
 
+Step 'Git（后面用 git clone 拉仓库与规范工具）'
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    $release = Invoke-RestMethod 'https://api.github.com/repos/git-for-windows/git/releases/latest' -TimeoutSec 30
+    $asset = $release.assets | Where-Object { $_.name -match '^Git-.*-64-bit\.exe$' } | Select-Object -First 1
+    if (-not $asset) { throw '找不到 Git for Windows 安装包' }
+    $installer = Join-Path $env:TEMP $asset.name
+    Write-Host "下载 $($asset.name)"
+    Invoke-WebRequest $asset.browser_download_url -OutFile $installer -TimeoutSec 600
+    Start-Process $installer -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP-' -Wait
+    Refresh-Path
+}
+Write-Host "git $(git --version)"
+
 Step 'Python 依赖（规范原页渲染、照片）'
 python -m pip install --quiet --upgrade pip
 python -m pip install --quiet pymupdf pillow

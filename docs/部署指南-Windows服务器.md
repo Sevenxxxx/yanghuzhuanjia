@@ -13,10 +13,11 @@
 | 项目 | 说明 |
 |---|---|
 | 服务器公网 IP | 腾讯云控制台首页能看到 |
+| GitHub PAT | fine-grained，只给本仓库 `Contents: Read`（clone 私有仓库用） |
 | 管理员密码 | 买的时候设置的；忘了就在控制台重置 |
 | `deploy.json` | 本机仓库根目录，**`api_key` 已填真实值**（`password` 默认 `yhg`） |
 | 规范库 | 本机的 `guifanchaxun` 目录，含 `guifansrc`（3.79GB）与 `library_data`（0.42GB） |
-| 上传通道 | WinSCP（推荐）或 RDP 里直接粘贴 |
+| 上传通道 | git clone（仓库与规范工具，走 PAT）；WinSCP 只用于 `deploy.json` 与两个数据目录 |
 
 先确认本机这两项：
 
@@ -74,62 +75,157 @@ Test-Path .\deploy.json                          # True
 
 ---
 
-## 3. 建目录，上传项目（约 1–2 分钟）
+## 3. 系统初始化（约 5–15 分钟）
 
-```powershell
-New-Item -ItemType Directory -Force -Path C:\road\app | Out-Null
-```
+先跑初始化：Git、Node、Python 都由它装（顺序反了会卡在「没有 git」）。
 
-用 WinSCP 把**本机仓库的内容**（不是整个外层文件夹）传到 `C:\road\app`。
-传完检查：
-
-```powershell
-Test-Path C:\road\app\scripts\p3\chat\app.py     # True
-Test-Path C:\road\app\deploy.json                # True ← 最容易漏，它是 gitignore 的
-```
-
-> 用 git clone 的话不会带 `deploy.json`，必须手动把本机这份传上去。
-
----
-
-## 4. 上传规范库（约 40–90 分钟，看上行带宽）
-
-传到 `C:\road\specs\guifanchaxun`，保持原来的目录结构：
+在服务器上以**管理员身份**打开 PowerShell，然后把这一个脚本从本机传上去：
 
 ```
-C:\road\specs\guifanchaxun\
-    tools\guifan-chaxun\      ← 工具代码
-    guifansrc\                ← 规范 PDF 原件（3.79GB）
-    library_data\             ← 索引（0.42GB）
+本机  scripts\p3\server\bootstrap-windows.ps1
+  →   服务器  C:\road\bootstrap-windows.ps1
 ```
-
-**建议**：这一步和第 5 步并行——传文件不占用终端，另开一个窗口先跑 `bootstrap`。
-
----
-
-## 5. 系统初始化（约 5–10 分钟）
-
-在服务器上以**管理员身份**打开 PowerShell：
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-cd C:\road\app\scripts\p3\server
+cd C:\road
 .\bootstrap-windows.ps1
 ```
 
-它会做：装 Node 24、Python 3.12、PyMuPDF/Pillow、dsh（装到 `C:\road\node-global` 并写进系统 PATH）；
-建 `roadchat` 账户（口令写在 `C:\road\etc\roadchat-password.txt`）；收紧 ACL；放行 Windows 防火墙 8443/443。
+它会做：装 Git、Node 24、Python 3.12、PyMuPDF/Pillow、**dsh**；
+建 `roadchat` 账户（口令写在 `C:\road\etc\roadchat-password.txt`）；收紧 ACL；放行 Windows 防火墙 80/443/8443。
+
+### dsh 是怎么装上去的
+
+dsh 是官方 npm 包，不需要编译源码：
+
+```powershell
+# bootstrap 内部执行的就是这两条
+$env:npm_config_prefix = 'C:\road\node-global'
+npm install -g @deepseek-ai/dsh
+```
+
+装完会得到：
+
+| 东西 | 位置 |
+|---|---|
+| 可执行入口 | `C:\road\node-global\dsh.cmd`（还有 `dsh.ps1`） |
+| 包本体 | `C:\road\node-global\node_modules\@deepseek-ai\dsh` |
+| 系统 PATH | `C:\road\node-global` 已写进 Machine PATH |
+
+之所以不用默认的 `%APPDATA%\npm`：那是管理员账户的目录，`roadchat` 看不到。
+
+**profile 不用你建**。聊天服务第一次为某个访问者启动时，会在他自己的 home 下生成
+`road-sdk` profile（模板来自 dsh 自带的 sdk preset）：
+
+```
+C:\road\work\visitors\<访问者id>\home\profiles\road-sdk\
+```
+
+所以第一次对话会慢 10–20 秒，是在建 profile + 起运行时；之后就快了。
+
+**检查 dsh 是否装好**：
+
+```powershell
+dsh --version                     # 应打印版本号
+Get-Command dsh | Select Source   # 应指向 C:\road\node-global\dsh.cmd
+```
+
+**装坏了怎么办**：
+
+| 现象 | 处理 |
+|---|---|
+| `dsh` 不是内部或外部命令 | 重开一个 PowerShell（PATH 只对新进程生效）；仍不行看 `C:\road\node-global` 里有没有 `dsh.cmd` |
+| npm 安装卡住或报网络错 | 重跑 bootstrap（已装部分会跳过）；或手动 `npm install -g @deepseek-ai/dsh --registry=https://registry.npmjs.org` |
+| 报 engines 不匹配 | `node -v` 必须 ≥ 24.9；不够就重跑 bootstrap 装 Node 24 |
+| 第一次回答特别慢 | 正常，见上面的 profile 说明 |
+
+> `install-chat.ps1` 开头会检查 `dsh` 在不在 PATH，不在就直接报「找不到 dsh；先跑 bootstrap-windows.ps1」。
 
 **做完应该看到**：
 
 ```
+git version 2.x
 node v24.x.x
 python Python 3.12.x
 dsh 0.2.x
 系统层完成。接下来：...
 ```
 
-> 中途会下载 Node、Python 安装包，需要外网。失败就重跑，已装的会自动跳过。
+再单独确认一次 dsh：
+
+```powershell
+dsh --version
+Get-Command dsh | Select Source    # C:\road\node-global\dsh.cmd
+```
+
+---
+
+## 4. git clone 拉仓库（约 1 分钟）
+
+仓库是私有的，需要一个**只读**凭证。推荐 fine-grained PAT（GitHub → Settings → Developer settings →
+Fine-grained tokens → 只勾这个仓库、权限只给 `Contents: Read`）。
+
+```powershell
+git clone https://<你的PAT>@github.com/Sevenxxxx/yanghuzhuanjia.git C:\road\app
+
+Test-Path C:\road\app\scripts\p3\chat\app.py    # True
+```
+
+`deploy.json` **不在仓库里**（被 gitignore），clone 完必须补上。两种方式：
+
+- **A**：本机用 WinSCP 只传 `deploy.json` 这一个文件到 `C:\road\app\deploy.json`；
+- **B**：服务器上直接写，把 `api_key` 换成真实值（注意 PowerShell 里反斜杠要写两个）：
+
+```powershell
+notepad C:\road\app\deploy.json
+```
+
+粘贴下面内容，保存成 **UTF-8**：
+
+```json
+{
+  "password": "yhg",
+  "api_key": "sk-替换成你的 key",
+  "domain": "你的域名",
+  "https": false,
+  "http_port": 8443,
+  "service_user": "roadchat",
+  "paths": {
+    "app": "C:\\road\\app",
+    "specs": "C:\\road\\specs",
+    "work": "C:\\road\\work",
+    "etc": "C:\\road\\etc",
+    "node_global": "C:\\road\\node-global"
+  }
+}
+```
+
+```powershell
+Test-Path C:\road\app\deploy.json    # True
+```
+
+---
+
+## 5. clone 规范工具，再补两个数据目录（约 40–90 分钟）
+
+规范工具也有远程仓库，先 clone：
+
+```powershell
+git clone https://github.com/Sevenxxxx/guifanchaxun.git C:\road\specs\guifanchaxun
+```
+
+但 `guifansrc\`（3.79GB）和 `library_data\`（0.42GB）**都不在 git 里**（被 gitignore），
+必须另外用 WinSCP 传：
+
+```
+本机 guifanchaxun\guifansrc      →  C:\road\specs\guifanchaxun\guifansrc
+本机 guifanchaxun\library_data  →  C:\road\specs\guifanchaxun\library_data
+```
+
+**建议**：这一步和第 6、7 步并行——传大文件不占终端，另开窗口继续往下做。
+
+> 以后更新：`cd C:\road\app; git pull`，然后重启任务（见第 11 节）。数据目录不在 git 里，不会被覆盖。
 
 ---
 
