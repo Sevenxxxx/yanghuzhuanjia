@@ -1,6 +1,8 @@
-# 道路养护 AI 技术专家 · 个人试用版
+# 道路养护 AI 技术专家
 
-在现有 Codex 中提供多轮养护咨询、风险线索检查、规范回源和按需交付。知识卡与风险规则尚未经工程专业审核，当前能力与版本见 [开发交接](docs/交接.md)。
+多轮养护咨询、风险线索检查、规范回源与按需交付。两种用法：本机双击 `启动咨询助手.cmd` 用聊天页；
+部署到服务器给同事试用见 [部署指南](docs/部署指南-Windows服务器.md)。知识卡与风险规则尚未经工程专业审核，
+当前能力与版本见 [开发交接](docs/交接.md)。
 
 开发接手先读 [AGENTS.md](AGENTS.md) → [开发交接](docs/交接.md)；产品目标与路线见 [总体方案](docs/道路养护%20AI%20技术专家——项目总体方案与%20Codex%20开发交接文档.md)。
 
@@ -41,11 +43,18 @@
 
 ## 开发与参考
 
+**部署与运维**
+
+- [部署指南：Windows Server 2022](docs/部署指南-Windows服务器.md)——九步上线，含门槛检查、排查与验收
+- [服务器脚本索引](scripts/p3/server/README.md) · [同事说明模板](scripts/p3/server/onboarding.md)
+- [ADR 0005：服务器部署](docs/decisions/0005-server-deployment.md)
+
+**开发与参考**
+
 - [当前状态、环境、验证命令及近期任务](docs/交接.md)
-- [代码架构](docs/architecture.md) · [已知限制](docs/known-limitations.md)
-- [验证记录](docs/validation.md) · [风险规则](docs/risk-policy.md) · [案例审核](docs/case-policy.md)
+- [代码架构](docs/architecture.md) · [已知限制](docs/known-limitations.md) · [验证记录](docs/validation.md)
+- [P3 入口说明](scripts/p3/README.md)（本机 8091 聊天页 / 8090 dsh 自带界面）
 - [咨询技能](.agents/skills/road-diagnosis/SKILL.md) · [请求格式](.agents/skills/road-diagnosis/references/operations.md)
-- [P3 本机与服务器入口](scripts/p3/README.md)（聊天前端按访问者隔离运行时；[服务器部署手册](scripts/p3/server/README.md)、[ADR 0005](docs/decisions/0005-server-deployment.md)）
-- [部署指南：Windows Server 2022](docs/部署指南-Windows服务器.md)（九步上手，含门槛检查、排查与验收）
+- [风险规则](docs/risk-policy.md) · [案例审核](docs/case-policy.md)
 
 若项目技能未自动启用，可要求显式读取技能文件。换机器、查存储位置或运行检查时，先读交接中的环境与数据影响说明。

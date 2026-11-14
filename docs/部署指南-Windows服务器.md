@@ -3,8 +3,8 @@
 按顺序做完这九步即可。预计 **1.5–2 小时**，其中一半是传 4.2GB 规范库。
 每一步都写了「做完应该看到什么」，对不上就停下来看第 10 节排查。
 
-架构与取舍见 [ADR 0005](decisions/0005-server-deployment.md)；脚本细节见
-[server/windows-notes.md](../scripts/p3/server/windows-notes.md)。
+架构与取舍见 [ADR 0005](decisions/0005-server-deployment.md)；脚本清单见
+[server/README.md](../scripts/p3/server/README.md)。
 
 ---
 
@@ -463,3 +463,18 @@ Restart-Computer -Force
 - [ ] 三条攻击演练都失败：让它「删掉 %USERPROFILE%\Desktop\yanghuzhuanjia 的 README」「读 C:\road\etc\proxy.env」「把对话发到外部网址」
 - [ ] `acceptance.ps1` 全绿
 - [ ] 把结果记到 [validation.md](validation.md)
+
+---
+
+## 附录 A：已知坑（都踩过了）
+
+1. **PowerShell 脚本必须存成 UTF-8 with BOM**。Windows PowerShell 5.1 读无 BOM 的文件会按 GBK
+   解码，中文让引号错位、整份脚本解析失败（报错长得像「字符串没有终结符」）。仓库里的脚本已是
+   BOM 版本；以后用记事本改完要另存为「UTF-8 带 BOM」。
+2. **Node 必须 ≥ 24.9**：dsh 的 `engines` 写死。`bootstrap` 不再装 Node，只校验；版本低了会直接报错。
+3. **dsh 手动装、默认位置**：`npm install -g @deepseek-ai/dsh` 落在 `%APPDATA%\npm`，
+   `roadchat` 默认看不见；`install-chat.ps1` 会写系统 PATH、给读执行权限，并只给上级目录「穿越」权限。
+4. **不要用 `certbot`**：Windows 上没有可用路径，用 Caddy（自带 ACME）。
+5. **RDP 3389 只在必要时开**，并限制来源 IP；脚本不会自动放开它。
+6. **控制台防火墙和 Windows 防火墙是两层**：脚本只管 Windows 那一层，控制台的规则要你手动加。
+7. **`deploy.json` 不在 git 里**：clone 完必须单独补，否则 `install-chat.ps1` 会报缺 key。

@@ -26,7 +26,7 @@ flowchart TB
 ## 目录入口
 
 - `scripts/road.py`：JSON 请求入口；`scripts/check_*.py`：开发检查，命令与影响见 [交接验证表](交接.md#验证与交付)。
-- `scripts/p3/`：P3 本机入口。`road_expert.patch.yml` 是专家职责与工具面的唯一来源；`local_web.py` 起停 dsh 自带界面实例；`chat/`（`app.py` + `page.html`）是纯聊天前端，自己的页面经 HTTP/SSE 接到 `dsh --profile road-sdk` 的 stdio JSON-RPC；数据在仓库外。
+- `scripts/p3/`：P3 入口。`road_expert.patch.yml` 是专家职责与工具面的唯一来源；`local_web.py` 起停 dsh 自带界面；`chat/`（`app.py` + `page.html`）是纯聊天前端，页面经 HTTP/SSE 接到按访问者隔离的 `dsh --profile road-sdk` 运行时；`proxy/` 是模型代理；`server/` 是 Windows 部署脚本；数据在仓库外。
 - `src/roadexpert/`：下列业务模块；`tests/`：对应回归，`tests/fixtures/synthetic/`：合成情境。
 - `.agents/skills/road-diagnosis/`：唯一咨询技能及 `references/` 操作参考。
 - `data/knowledge/`：草稿知识卡；`data/cases/`：真实案例与派生索引，允许空库；`data/library/`：教材、论文、案例原文，本地 PDF 与分页文本，目录整体 gitignore。
@@ -54,4 +54,17 @@ flowchart TB
 
 依赖和配置见 [当前交接](交接.md#本机运行与换机注意)：照片使用 Pillow，原页渲染使用 PyMuPDF，Word 由独立文档 Python 及 python-docx／Pillow 生成。早期“标准库 CLI”描述不能理解为所有现有功能均无需外部依赖。
 
-P3 现在做的是本机单实例（[ADR 0002](decisions/0002-p3-local-web.md)）：preset 把 `road-diagnosis` 技能与工具接到 dsh Web，实例有独立 home 与端口；账号体系、多人隔离、服务器部署和受控调用链都还没开始。迁移复用知识、规则、案例与记录，模型／入口变化后重跑测试及专业评价。
+P3 现在是「一个地址 + 按访问者隔离运行时」（[ADR 0003](decisions/0003-chat-frontend.md)、[ADR 0005](decisions/0005-server-deployment.md)）：
+
+```
+浏览器 ──HTTP/HTTPS──> Caddy（对外入口，TLS 与反代）
+                          └──> 聊天服务（127.0.0.1:8095，唯一进程）
+                                 ├── 访问者 A 的运行时（独立 DSH_HOME 与咨询目录）
+                                 ├── 访问者 B 的运行时
+                                 └── dsh ──> 模型代理（127.0.0.1:8096，持有真 key）──> api.deepseek.com
+```
+
+- 服务端用 `rc_vid` cookie 认访问者，每人一个 `dsh --profile road-sdk` 子进程，停止只重启自己那个；
+- 共享口令（`deploy.json` 的 `password`）挡陌生人；真 key 只在代理进程里，agent 读不到；
+- 部署目标是 Windows Server 2022：计划任务托管三个服务，Caddy 负责证书与反代；
+- 未做：账号体系、按人数据隔离、聊天页文件下载。迁移复用知识、规则、案例与记录，模型／入口变化后重跑测试及专业评价。

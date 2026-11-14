@@ -1,4 +1,4 @@
-# P3 本机 Web 入口（道路养护专家）
+# P3 入口（道路养护专家）
 
 这里有两套入口，共用同一份专家职责说明（[road_expert.patch.yml](road_expert.patch.yml)）：
 
@@ -9,7 +9,7 @@
 
 纯聊天前端是为「不显示其他界面」做的，取舍见 [ADR 0003](../docs/decisions/0003-chat-frontend.md)；
 视觉规范按 Apple 设计体系（HIG）落地，token 与约束见 [ADR 0004](../docs/decisions/0004-ui-apple-design.md)。
-两者互不干扰，可以同时跑。
+两者互不干扰，可以同时跑。要部署到服务器给同事用，见 [部署指南](../../docs/部署指南-Windows服务器.md)。
 
 ## 纯聊天前端
 
@@ -26,7 +26,8 @@ python -X utf8 scripts/p3/chat/app.py
 - **访问口令**：第一次打开是登录页，默认口令 `yhg`。口令与 API key 等需要手填的东西集中在仓库根的
   [deploy.example.json](../../deploy.example.json)：复制成 `deploy.json` 再填（该文件已被 gitignore）。
   本机的启动脚本会自动带 `--config deploy.json`；服务器上的 `install-chat.ps1` 也从这里读。
-  不想用这个文件时，仍可改 [config.json](chat/config.json)；写成 `""` 表示不设口令。
+  不想用 `deploy.json` 时，用环境变量 `ROAD_CHAT_PASSWORD` 覆盖；写成空串表示不设口令
+（[config.example.json](chat/config.example.json) 只是没有配置时的兜底示例）。
   环境变量 `ROAD_CHAT_PASSWORD` 优先级最高。登录后 7 天内免输入，密钥存在 `dsh-roads/auth.key`，
   重启不失效；同一 IP 一分钟内错 5 次会被挡 429。
 - 默认端口 8091，监听本机局域网 IPv4；本机也用它打开，`127.0.0.1:8091` 连不上。

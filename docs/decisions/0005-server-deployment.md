@@ -38,3 +38,13 @@
 - 规范工具 `guifanchaxun` 只在 Windows 验证过，Linux 首次运行是首要风险。
 - 记录默认 24 小时清理；不做保存与 Word 下载；不做按人计费。
 - 夜间重启会中断当时正在跑的回答（04:00 通常无人使用）。
+
+## 变更（2026-11-14）
+
+- **系统改 Windows Server 2022**：`guifanchaxun` 是原生 Windows 项目，Linux 首次运行风险未消除；
+  部署层改用 PowerShell + 计划任务 + Caddy，脚本见 `scripts/p3/server/`，手册见
+  [部署指南](../部署指南-Windows服务器.md)。
+- **仓库与规范库放桌面**，运行时数据留在 `C:oad`；`deploy.json` 支持 `%USERPROFILE%` 展开。
+- **试用期允许纯 HTTP**：`https=false` 时 Caddy 只开一个 HTTP 端口；切 HTTPS 改一个字段重跑。
+- **Linux 部署脚本移出仓库**：从未在 Linux 验证，保留会误导；若要回到 Linux，需重做部署层。
+- 手填项（口令、API key、域名、路径）集中到仓库根 `deploy.json`（gitignore），本机与服务端共用。
