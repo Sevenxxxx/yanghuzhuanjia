@@ -31,7 +31,7 @@ sys.path.insert(0, str(P3))
 from local_web import local_addresses, pick_lan_address  # noqa: E402
 
 PROFILE = "road-sdk"
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 DEFAULT_PORT = 8091
 DEFAULT_ROOT = Path.home() / "dsh-roads"
 # 同一访问者累计开这么多新对话且空闲时，重建运行时，避免会话无限堆积。
@@ -444,8 +444,10 @@ class Visitor:
     独立子进程。因此某人点停止只会重启他自己的运行时。
     """
 
-    def __init__(self, root, visitor_id, api_key):
+    def __init__(self, root, visitor_id, api_key, service=None):
         self.id = visitor_id
+        self.service = service
+        self._holds_slot = False
         self.session_id = ""       # 当前对话；回收后用它恢复
         self._resume_on_spawn = False
         self.root = Path(root)
@@ -466,6 +468,22 @@ class Visitor:
         self._active = {}   # sessionId -> 进行中的 Turn
 
     # -- 运行时生命周期
+    def _start_runtime(self):
+        """占一个在线名额再起运行时；失败或超额时把名额退回。"""
+        if self.service is not None and not self.service.online_slot(self):
+            raise ChatError(self.service.LIMIT_MESSAGE if self.service else "暂时已超过使用人数上限")
+        self._holds_slot = True
+        try:
+            return self._spawn()
+        except Exception:
+            self._release_slot()
+            raise
+
+    def _release_slot(self):
+        if self._holds_slot and self.service is not None:
+            self.service.release_slot(self)
+        self._holds_slot = False
+
     def _initialize(self, runtime):
         runtime.call("initialize", {
             "cwd": str(ROOT),
@@ -494,7 +512,7 @@ class Visitor:
             self.ready = False
             self._ready.clear()
             try:
-                self.runtime = self._spawn()
+                self.runtime = self._start_runtime()
                 if self._resume_on_spawn and self.session_id:
                     try:
                         self.runtime.call("session/resume", {"sessionId": self.session_id}, timeout=180)
@@ -517,6 +535,7 @@ class Visitor:
         runtime, self.runtime = self.runtime, None
         self.ready = False
         self._ready.clear()
+        self._release_slot()
         if runtime is not None:
             runtime.kill()
 
@@ -527,7 +546,7 @@ class Visitor:
         try:
             self._kill_runtime()
             try:
-                self.runtime = self._spawn()
+                self.runtime = self._start_runtime()
                 self.error = None
                 self.ready = True
                 if resume_session:
@@ -742,17 +761,43 @@ class ChatService:
         self._visitors = {}
         self._guard = threading.Lock()
         self._stopped = threading.Event()
+        self._online = 0            # 已占用的在线名额（有运行时的访问者）
 
     def visitor(self, visitor_id):
+        """按需创建访问者；名额由「在线」决定，见 online_slot()。"""
         with self._guard:
             existing = self._visitors.get(visitor_id)
             if existing is not None:
                 return existing
-            if len(self._visitors) >= self.MAX_VISITORS:
-                raise ChatError(self.LIMIT_MESSAGE)
-            created = Visitor(self.root, visitor_id, self.api_key)
+            created = Visitor(self.root, visitor_id, self.api_key, service=self)
             self._visitors[visitor_id] = created
             return created
+
+    def online_slot(self, visitor):
+        """给一个访问者分配在线名额；满 8 个就拒绝。"""
+        with self._guard:
+            if visitor._holds_slot:
+                return True
+            if self._online >= self.MAX_VISITORS:
+                return False
+            self._online += 1
+            visitor._holds_slot = True
+            return True
+
+    def release_slot(self, visitor):
+        with self._guard:
+            self._online = max(0, self._online - 1)
+
+    def new_session(self, visitor):
+        """开新对话前先确认还有在线名额，避免第 9 个人白等一轮。"""
+        if visitor.runtime is None and self._online >= self.MAX_VISITORS:
+            raise ChatError(self.LIMIT_MESSAGE)
+        return visitor.new_session()
+
+    @property
+    def online(self):
+        with self._guard:
+            return self._online
 
     def start_reaper(self, idle_seconds, interval=60.0):
         """空闲回收：超过 idle_seconds 没说话就停运行时；0 表示关闭。"""
@@ -781,6 +826,7 @@ class ChatService:
             visitors = list(self._visitors.values())
         return {
             "ok": True,
+            "online": self.online,
             "visitors": len(visitors),
             "ready": sum(1 for v in visitors if v.ready),
             "sessions": sum(v.sessions for v in visitors),
@@ -1071,7 +1117,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(503 if self._visitor_error else 401,
                            {"error": self._visitor_error or "会话标识缺失；刷新页面重开"})
                 return
-            self._json(200, {"sessionId": visitor.new_session()})
+            try:
+                session_id = self.service.new_session(visitor)
+            except ChatError as error:
+                self._json(503, {"error": str(error)})
+                return
+            self._json(200, {"sessionId": session_id})
             return
         visitor_id, visitor = self._visitor()
         if visitor is None:

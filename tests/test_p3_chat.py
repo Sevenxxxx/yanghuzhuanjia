@@ -186,6 +186,8 @@ def make_visitor():
     visitor._ready = threading.Event()
     visitor.session_id = ""
     visitor._resume_on_spawn = False
+    visitor._holds_slot = False
+    visitor.service = None
     visitor.error = None
     visitor.restarts = []
     visitor.restart = lambda resume_session=None: visitor.restarts.append(resume_session)
@@ -294,27 +296,53 @@ class IdleReclaimTests(unittest.TestCase):
 
 
 class LimitAndReaperTests(unittest.TestCase):
-    def fill(self, service, count=None):
-        total = count or app.ChatService.MAX_VISITORS
-        return [service.visitor(f"{index:032x}") for index in range(total)]
+    """名额按「在线（有运行时）」算，满 8 个才拒绝新的。"""
 
-    def test_visitor_over_limit_gets_friendly_message(self):
+    def service_with_online(self, count):
         service = app.ChatService(Path("."), "sk-test")
-        self.fill(service)
+        visitors = [service.visitor(f"{index:032x}") for index in range(count)]
+        for visitor in visitors:
+            self.assertTrue(service.online_slot(visitor))
+        return service, visitors
+
+    def test_online_slot_caps_at_eight(self):
+        service, _ = self.service_with_online(app.ChatService.MAX_VISITORS)
+        ninth = service.visitor("f" * 32)
+        self.assertFalse(service.online_slot(ninth))
+        self.assertEqual(service.online, app.ChatService.MAX_VISITORS)
+
+    def test_ninth_visitor_is_blocked_with_friendly_message(self):
+        service, _ = self.service_with_online(app.ChatService.MAX_VISITORS)
+        ninth = service.visitor("f" * 32)
         with self.assertRaises(app.ChatError) as raised:
-            service.visitor("f" * 32)
+            service.new_session(ninth)
         message = str(raised.exception)
         self.assertIn("使用人数上限", message)
         self.assertIn(str(app.ChatService.MAX_VISITORS), message)
 
-    def test_reaper_stops_idle_runtimes(self):
+    def test_reclaimed_visitor_does_not_hold_a_slot(self):
+        service, visitors = self.service_with_online(app.ChatService.MAX_VISITORS)
+        visitors[0]._holds_slot = False        # 模拟空闲回收：运行时已停
+        service.release_slot(visitors[0])
+        ninth = service.visitor("f" * 32)
+        self.assertTrue(service.online_slot(ninth))
+
+    def test_visitor_already_online_can_open_new_conversation(self):
+        service, visitors = self.service_with_online(app.ChatService.MAX_VISITORS)
+        visitors[0].runtime = FakeRuntime()
+        self.assertRegex(service.new_session(visitors[0]), r"^web-[0-9a-f]{12}$")
+
+    def test_reaper_stops_idle_runtimes_and_frees_slots(self):
         service = app.ChatService(Path("."), "sk-test")
-        visitors = self.fill(service, 2)
+        visitors = [service.visitor(f"{index:032x}") for index in range(2)]
         for visitor in visitors:
+            self.assertTrue(service.online_slot(visitor))
             visitor.runtime = FakeRuntime()
             visitor.ready = True
             visitor.last_used = 0
+        self.assertEqual(service.online, 2)
         self.assertEqual(service.reap_idle(60, now=10000), 2)
+        self.assertEqual(service.online, 0)
         for visitor in visitors:
             self.assertIsNone(visitor.runtime)
 
