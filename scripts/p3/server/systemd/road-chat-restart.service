@@ -1,6 +1,0 @@
-[Unit]
-Description=Nightly restart of the road maintenance chat service
-
-[Service]
-Type=oneshot
-ExecStart=/bin/systemctl restart road-chat.service
