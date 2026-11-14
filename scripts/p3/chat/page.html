@@ -589,11 +589,23 @@
     pick.disabled = on;
   }
 
+  // 统一的 JSON 请求：401 回登录页，非 2xx 抛出后端给的原因
+  async function apiJson(path, options = {}) {
+    const response = await fetch(path, options);
+    if (response.status === 401) {
+      location.replace('/');
+      throw new Error('需要口令');
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || ('请求失败：' + response.status));
+    return data;
+  }
+
   async function stopTurn() {
     userStopped = true;
     setStatus('正在停止…');
     try {
-      await fetch('/api/stop', {
+      await apiJson('/api/stop', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ sessionId }),
@@ -1145,16 +1157,11 @@
       if (missing) { showError('至少要回答一个问题'); return; }
       submit.disabled = true;
       try {
-        const response = await fetch('/api/answer', {
+        await apiJson('/api/answer', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ requestId: payload.requestId, answers }),
         });
-        if (response.status === 401) { location.replace('/'); return; }
-        if (!response.ok) {
-          const detail = await response.json().catch(() => ({}));
-          throw new Error(detail.error || '回答没有送达');
-        }
         card.remove();
         setStatus('正在按你的回答继续…');
       } catch (error) {
@@ -1186,11 +1193,9 @@
   render();
   (async () => {
     try {
-      const state = await fetch('/api/health').then((r) => r.json());
+      const state = await apiJson('/api/health');
       if (!state.ok) { showError(state.error || '后端还没准备好'); return; }
-      const freshResponse = await fetch('/api/new', { method: 'POST' });
-      if (freshResponse.status === 401) { location.replace('/'); return; }
-      const fresh = await freshResponse.json();
+      const fresh = await apiJson('/api/new', { method: 'POST' });
       sessionId = fresh.sessionId;
       input.focus();
     } catch (error) {

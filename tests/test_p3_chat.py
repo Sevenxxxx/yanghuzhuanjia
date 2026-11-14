@@ -272,6 +272,52 @@ class PoolTests(unittest.TestCase):
         self.assertEqual(service.health()["visitors"], 2)
 
 
+class TranslateEventTests(unittest.TestCase):
+    """0.4.0 把会话事件翻译抽成了方法，这里锁住它的输出与返回值。"""
+
+    def make(self):
+        visitor = app.Visitor.__new__(app.Visitor)
+        visitor.emitted = []
+        visitor.emit = lambda name, data: visitor.emitted.append((name, data))
+        return visitor
+
+    def test_assistant_message_emits_text_and_reports_produced(self):
+        visitor = self.make()
+        produced = visitor._translate_event({
+            "type": "assistant/message",
+            "data": {"message": {"content": [{"type": "text", "text": "结论"}]}},
+        }, visitor.emit)
+        self.assertTrue(produced)
+
+    def test_tool_call_becomes_trace_without_produced(self):
+        visitor = self.make()
+        produced = visitor._translate_event({
+            "type": "tool/call",
+            "data": {"callId": "c1", "name": "pwsh", "arguments": {"command": "road.py"}},
+        }, visitor.emit)
+        self.assertFalse(produced)
+
+    def test_injected_context_becomes_trace(self):
+        visitor = self.make()
+        produced = visitor._translate_event({
+            "type": "user/message",
+            "data": {"source": {"kind": "agent-instructions", "path": "AGENTS.md"}},
+        }, visitor.emit)
+        self.assertFalse(produced)
+
+    def test_plain_user_message_emits_nothing(self):
+        visitor = self.make()
+        produced = visitor._translate_event({
+            "type": "user/message",
+            "data": {"source": {"kind": "user"}},
+        }, visitor.emit)
+        self.assertFalse(produced)
+
+    def test_unknown_event_is_ignored(self):
+        visitor = self.make()
+        self.assertFalse(visitor._translate_event({"type": "something/else"}, visitor.emit))
+
+
 class TraceTests(unittest.TestCase):
     def test_assistant_blocks_split_thinking_and_answer(self):
         event = {"data": {"message": {"content": [

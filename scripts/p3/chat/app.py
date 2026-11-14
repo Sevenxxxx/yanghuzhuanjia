@@ -31,6 +31,7 @@ sys.path.insert(0, str(P3))
 from local_web import local_addresses, pick_lan_address  # noqa: E402
 
 PROFILE = "road-sdk"
+VERSION = "0.4.0"
 DEFAULT_PORT = 8091
 DEFAULT_ROOT = Path.home() / "dsh-roads"
 # 同一访问者累计开这么多新对话且空闲时，重建运行时，避免会话无限堆积。
@@ -585,6 +586,31 @@ class Visitor:
                          name=f"stop-{self.id}", daemon=True).start()
         return True
 
+    def _translate_event(self, event, emit):
+        """把一条 session.event 翻成 SSE；返回 True 表示这一条带了回答正文。"""
+        etype = event.get("type")
+        data = event.get("data") if isinstance(event.get("data"), dict) else {}
+        if etype == "user/message":
+            source = data.get("source") if isinstance(data.get("source"), dict) else {}
+            if source.get("kind") not in (None, "", "user"):
+                emit("trace", {"kind": "context", "label": context_label(source)})
+        elif etype == "assistant/message":
+            thinking, text = assistant_blocks(event)
+            for thought in thinking:
+                emit("trace", {"kind": "thinking", "text": thought})
+            if text:
+                emit("assistant", {"text": text})
+                return True
+        elif etype == "tool/call":
+            label, detail = trace_label(data.get("name"), data.get("arguments"))
+            emit("trace", {"kind": "tool", "callId": data.get("callId"),
+                           "label": label, "detail": detail})
+        elif etype == "tool/result":
+            message = data.get("message") if isinstance(data.get("message"), dict) else {}
+            emit("trace", {"kind": "tool-result",
+                           "callId": message.get("toolCallId") or data.get("callId")})
+        return False
+
     def turn(self, session_id, blocks, emit):
         self.last_used = time.time()
         if not session_id:
@@ -635,28 +661,8 @@ class Visitor:
                 if payload.get("sessionId") not in (None, session_id):
                     continue
                 if method == "session.event":
-                    event = payload.get("event") or {}
-                    etype = event.get("type")
-                    data = event.get("data") if isinstance(event.get("data"), dict) else {}
-                    if etype == "user/message":
-                        source = data.get("source") if isinstance(data.get("source"), dict) else {}
-                        if source.get("kind") not in (None, "", "user"):
-                            emit("trace", {"kind": "context", "label": context_label(source)})
-                    elif etype == "assistant/message":
-                        thinking, text = assistant_blocks(event)
-                        for thought in thinking:
-                            emit("trace", {"kind": "thinking", "text": thought})
-                        if text:
-                            produced = True
-                            emit("assistant", {"text": text})
-                    elif etype == "tool/call":
-                        label, detail = trace_label(data.get("name"), data.get("arguments"))
-                        emit("trace", {"kind": "tool", "callId": data.get("callId"),
-                                       "label": label, "detail": detail})
-                    elif etype == "tool/result":
-                        message = data.get("message") if isinstance(data.get("message"), dict) else {}
-                        emit("trace", {"kind": "tool-result",
-                                       "callId": message.get("toolCallId") or data.get("callId")})
+                    if self._translate_event(payload.get("event") or {}, emit):
+                        produced = True
                 elif method == "session.status":
                     if payload.get("status") == "running":
                         emit("status", {"status": "running"})
@@ -908,8 +914,9 @@ class Handler(BaseHTTPRequestHandler):
                 return value.strip()
         return None
 
-    def _set_cookie(self, visitor_id):
-        flags = f"{COOKIE_NAME}={visitor_id}; Path=/; Max-Age={COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax"
+    def _cookie_header(self, name, value, max_age=COOKIE_MAX_AGE):
+        """两种 cookie 只差名字与值，统一在这里拼属性。"""
+        flags = f"{name}={value}; Path=/; Max-Age={max_age}; HttpOnly; SameSite=Lax"
         if _cookie_secure():
             flags += "; Secure"
         return ("Set-Cookie", flags)
@@ -923,12 +930,6 @@ class Handler(BaseHTTPRequestHandler):
             if name == "rc_auth" and check_auth_cookie(value.strip(), self.secret):
                 return True
         return False
-
-    def _set_auth_cookie(self):
-        flags = f"rc_auth={make_auth_cookie(self.secret)}; Path=/; Max-Age={COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax"
-        if _cookie_secure():
-            flags += "; Secure"
-        return ("Set-Cookie", flags)
 
     def _too_many_attempts(self):
         ip = self.client_address[0]
@@ -956,9 +957,9 @@ class Handler(BaseHTTPRequestHandler):
         given = str(payload.get("password") or "")
         if not self.password or hmac.compare_digest(given, self.password):
             self._record_attempt(True)
-            headers = [self._set_auth_cookie()]
+            headers = [self._cookie_header("rc_auth", make_auth_cookie(self.secret))]
             if self._cookie_id() is None:
-                headers.append(self._set_cookie(uuid.uuid4().hex))
+                headers.append(self._cookie_header(COOKIE_NAME, uuid.uuid4().hex))
             self._json(200, {"ok": True}, headers)
             return
         self._record_attempt(False)
@@ -985,7 +986,7 @@ class Handler(BaseHTTPRequestHandler):
             headers = []
             if self._cookie_id() is None:
                 visitor_id = uuid.uuid4().hex
-                headers.append(self._set_cookie(visitor_id))
+                headers.append(self._cookie_header(COOKIE_NAME, visitor_id))
             body = PAGE.read_bytes()
             self.send_response(200)
             self.send_header("content-type", "text/html; charset=utf-8")
@@ -1088,6 +1089,7 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"端口，默认 {DEFAULT_PORT}")
     parser.add_argument("--host", help="监听地址，默认本机局域网 IPv4，取不到则 127.0.0.1")
     parser.add_argument("--print-url", action="store_true", help="只打印访问地址后退出")
+    parser.add_argument("--version", action="version", version=f"road-chat {VERSION}")
     parser.add_argument("--config", help="配置文件路径（默认 scripts/p3/chat/config.json；可指向仓库根的 deploy.json）")
     args = parser.parse_args(argv)
 
