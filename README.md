@@ -46,5 +46,6 @@
 - [验证记录](docs/validation.md) · [风险规则](docs/risk-policy.md) · [案例审核](docs/case-policy.md)
 - [咨询技能](.agents/skills/road-diagnosis/SKILL.md) · [请求格式](.agents/skills/road-diagnosis/references/operations.md)
 - [P3 本机与服务器入口](scripts/p3/README.md)（聊天前端按访问者隔离运行时；[服务器部署手册](scripts/p3/server/README.md)、[ADR 0005](docs/decisions/0005-server-deployment.md)）
+- [部署指南：Windows Server 2022](docs/部署指南-Windows服务器.md)（九步上手，含门槛检查、排查与验收）
 
 若项目技能未自动启用，可要求显式读取技能文件。换机器、查存储位置或运行检查时，先读交接中的环境与数据影响说明。
