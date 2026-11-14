@@ -16,7 +16,7 @@ Linux 那套（`bootstrap-linux.sh` / `install-app.sh`）在 Windows 上不能�
 
 | 脚本 | 作用 | 何时跑 |
 |---|---|---|
-| [bootstrap-windows.ps1](bootstrap-windows.ps1) | 装 Node 24、Python 3.12、dsh、PyMuPDF/Pillow；建目录、建 `roadchat` 账户、收紧 ACL、放行防火墙 | 新机器一次 |
+| [bootstrap-windows.ps1](bootstrap-windows.ps1) | 装 Node 24、Python 3.12、Git、PyMuPDF/Pillow；建目录、建 `roadchat` 账户、收紧 ACL、放行防火墙（**不装 dsh**） | 新机器一次 |
 | [install-chat.ps1](install-chat.ps1) | 写配置、生成启动脚本、注册三个计划任务（聊天/代理/Caddy）、装 Caddy 并校验配置 | 每次换 key / 改域名 / 重装 |
 | [acceptance.ps1](acceptance.ps1) | 上线门槛自检（程序、工具、服务、权限、密钥） | 每次部署后 |
 
@@ -59,7 +59,7 @@ cd C:\road\server
 | `C:\road\etc` | `config.json`、`roadchat.env`、`proxy.env`、`proxy.patch.yml` |
 | `C:\road\bin` | `run-chat.ps1`、`run-proxy.ps1`（计划任务调它们） |
 | `C:\road\logs` | 代理用量、运行日志 |
-| `C:\road\node-global` | dsh 的全局安装目录（避免只有管理员可见） |
+| `%APPDATA%\npm` | dsh 的默认全局安装位置（`npm i -g` 装在这里；`install-chat.ps1` 负责让服务账户能读） |
 
 `roadchat` 是专用本地账户，没有管理员权限；真实 API key 只在 `proxy.env`，其 ACL 只给
 Administrators 与 SYSTEM——agent 以 `roadchat` 运行，读不到。
@@ -82,8 +82,9 @@ Administrators 与 SYSTEM——agent 以 `roadchat` 运行，读不到。
    中文会让引号错位、整份脚本解析失败。三支脚本已经是 BOM 版本；以后用记事本改完要另存为
    「UTF-8 带 BOM」。
 2. **Node 必须 ≥ 24.9**：dsh 的 `engines` 写死，Node 20 装上也被拒；`bootstrap` 装的是 24。
-3. **`dsh` 别用管理员身份装**：npm 全局默认装到 `%APPDATA%\npm`，`roadchat` 看不见；
-   脚本装到 `C:\road\node-global` 并写进系统 PATH。
+3. **dsh 手动装，默认位置即可**：`npm install -g @deepseek-ai/dsh`。它落在
+   `%APPDATA%\npm`，`roadchat` 默认看不见——`install-chat.ps1` 会把该目录写进系统 PATH、
+   给 `roadchat` 读+执行权限，并只给上级目录「穿越」权限（不暴露用户资料）。
 4. **不要用 `certbot`**：Windows 上没有可用路径，用 Caddy（自带 ACME）。
 5. **RDP 3389 只在必要时开**，并限制来源 IP；`install-chat.ps1` 不会自动放开它。
 6. 域名备案前，`:8443` + 自签证书可用；备案后再加域名块。

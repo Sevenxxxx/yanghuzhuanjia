@@ -54,7 +54,30 @@ if ($ApiKey -notmatch '^sk-') { throw "api_key 看起来不像真的（当前：
 foreach ($path in @("$AppDir\scripts\p3\chat\app.py", "$AppDir\scripts\p3\proxy\model_proxy.py")) {
     if (-not (Test-Path $path)) { throw "缺少 $path；先把仓库放到 $AppDir" }
 }
-if (-not (Get-Command dsh -ErrorAction SilentlyContinue)) { throw '找不到 dsh；先跑 bootstrap-windows.ps1' }
+Step '检查 dsh'
+$dshCommand = Get-Command dsh -ErrorAction SilentlyContinue
+if (-not $dshCommand) {
+    throw '找不到 dsh：先执行 npm install -g @deepseek-ai/dsh，再重跑本脚本'
+}
+$dshDir = Split-Path $dshCommand.Source -Parent
+Write-Host "dsh: $($dshCommand.Source)"
+
+# 服务以 roadchat 身份运行，要能找到并读取 dsh（默认装在当前用户 %APPDATA%\npm 下）
+$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+if ($machinePath -notlike "*$dshDir*") {
+    [Environment]::SetEnvironmentVariable('Path', "$machinePath;$dshDir", 'Machine')
+    Write-Host "已把 $dshDir 写入系统 PATH"
+}
+icacls $dshDir /grant "${ServiceUser}:(OI)(CI)RX" | Out-Null
+
+# dsh 在某个用户目录下时，只给「穿越」权限，不给列目录，避免暴露该用户资料
+$profileRoot = [Environment]::GetFolderPath('UserProfile')
+if ($dshDir.StartsWith($profileRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    foreach ($ancestor in @($profileRoot, (Join-Path $profileRoot 'AppData'), (Join-Path $profileRoot 'AppData\Roaming'))) {
+        if (Test-Path $ancestor) { icacls $ancestor /grant "${ServiceUser}:(X)" | Out-Null }
+    }
+    Write-Host "已给 $ServiceUser 穿越 $profileRoot 的权限（仅穿越，不能列目录）"
+}
 if (-not (Test-Path (Join-Path $EtcDir "$ServiceUser-password.txt"))) {
     throw "缺少 $EtcDir\$ServiceUser-password.txt；先跑 bootstrap-windows.ps1"
 }

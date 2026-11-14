@@ -1,7 +1,8 @@
 ﻿#Requires -RunAsAdministrator
 <#
   一次性初始化 Windows Server 2022（轻量应用服务器）。
-  装 Node 24、Python 3.12、dsh、Python 依赖；建目录与专用账户；收紧 ACL。
+  装 Node 24、Python 3.12、Git、Python 依赖；建目录与专用账户；收紧 ACL；放行防火墙。
+  dsh 不在这里装，见部署指南第 4 步（你自己用 npm 装到默认位置）。
   用法：在管理员 PowerShell 里执行
       Set-ExecutionPolicy -Scope Process Bypass -Force
       .\bootstrap-windows.ps1
@@ -12,7 +13,6 @@ param(
     [string]$SpecDir = 'C:\road\specs',
     [string]$WorkDir = 'C:\road\work',
     [string]$EtcDir = 'C:\road\etc',
-    [string]$NodeGlobal = 'C:\road\node-global',
     [string]$ServiceUser = 'roadchat'
 )
 
@@ -32,7 +32,6 @@ if ($Deploy) {
     if ($Deploy.paths.specs) { $SpecDir = $Deploy.paths.specs }
     if ($Deploy.paths.work) { $WorkDir = $Deploy.paths.work }
     if ($Deploy.paths.etc) { $EtcDir = $Deploy.paths.etc }
-    if ($Deploy.paths.node_global) { $NodeGlobal = $Deploy.paths.node_global }
     if ($Deploy.service_user) { $ServiceUser = $Deploy.service_user }
 }
 
@@ -40,11 +39,11 @@ function Step([string]$text) { Write-Host "`n== $text ==" -ForegroundColor Cyan 
 function Refresh-Path {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
     $user = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $env:Path = ($machine, $user, $NodeGlobal) -join ';'
+    $env:Path = ($machine, $user) -join ';'
 }
 
 Step '目录'
-foreach ($dir in @($AppDir, $SpecDir, $WorkDir, $EtcDir, $NodeGlobal, 'C:\road\bin', 'C:\road\logs')) {
+foreach ($dir in @($AppDir, $SpecDir, $WorkDir, $EtcDir, 'C:\road\bin', 'C:\road\logs')) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
 
@@ -104,17 +103,6 @@ Step 'Python 依赖（规范原页渲染、照片）'
 python -m pip install --quiet --upgrade pip
 python -m pip install --quiet pymupdf pillow
 
-Step 'dsh（装到独立 prefix，避免只有管理员账户能看到）'
-$env:npm_config_prefix = $NodeGlobal
-npm install -g @deepseek-ai/dsh
-if ($LASTEXITCODE -ne 0) { throw 'dsh 安装失败' }
-$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-if ($machinePath -notlike "*$NodeGlobal*") {
-    [Environment]::SetEnvironmentVariable('Path', "$machinePath;$NodeGlobal", 'Machine')
-}
-Refresh-Path
-Write-Host "dsh $(dsh --version)"
-
 Step "服务账户 $ServiceUser"
 if (-not (Get-LocalUser -Name $ServiceUser -ErrorAction SilentlyContinue)) {
     $alphabet = (48..57) + (65..90) + (97..122)
@@ -147,7 +135,8 @@ Write-Host @"
 
 系统层完成。接下来：
   1. 把仓库放到 $AppDir，规范库放到 $SpecDir\guifanchaxun（含 guifansrc 与 library_data）
-  2. 仓库根目录的 deploy.json 已填好（password / api_key / domain 都在那里）
-  3. 管理员 PowerShell 执行 .\install-chat.ps1
-  4. 执行 .\acceptance.ps1 过门槛
+  2. 用 npm 装 dsh（部署指南第 4 步，默认位置即可）
+  3. git clone 仓库与规范工具，补 deploy.json 和两个数据目录
+  4. 管理员 PowerShell 执行 .\install-chat.ps1
+  5. 执行 .\acceptance.ps1 过门槛
 "@ -ForegroundColor Green

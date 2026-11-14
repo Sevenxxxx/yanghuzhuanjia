@@ -91,55 +91,8 @@ cd C:\road
 .\bootstrap-windows.ps1
 ```
 
-它会做：装 Git、Node 24、Python 3.12、PyMuPDF/Pillow、**dsh**；
+它会做：装 Git、Node 24、Python 3.12、PyMuPDF/Pillow；
 建 `roadchat` 账户（口令写在 `C:\road\etc\roadchat-password.txt`）；收紧 ACL；放行 Windows 防火墙 80/443/8443。
-
-### dsh 是怎么装上去的
-
-dsh 是官方 npm 包，不需要编译源码：
-
-```powershell
-# bootstrap 内部执行的就是这两条
-$env:npm_config_prefix = 'C:\road\node-global'
-npm install -g @deepseek-ai/dsh
-```
-
-装完会得到：
-
-| 东西 | 位置 |
-|---|---|
-| 可执行入口 | `C:\road\node-global\dsh.cmd`（还有 `dsh.ps1`） |
-| 包本体 | `C:\road\node-global\node_modules\@deepseek-ai\dsh` |
-| 系统 PATH | `C:\road\node-global` 已写进 Machine PATH |
-
-之所以不用默认的 `%APPDATA%\npm`：那是管理员账户的目录，`roadchat` 看不到。
-
-**profile 不用你建**。聊天服务第一次为某个访问者启动时，会在他自己的 home 下生成
-`road-sdk` profile（模板来自 dsh 自带的 sdk preset）：
-
-```
-C:\road\work\visitors\<访问者id>\home\profiles\road-sdk\
-```
-
-所以第一次对话会慢 10–20 秒，是在建 profile + 起运行时；之后就快了。
-
-**检查 dsh 是否装好**：
-
-```powershell
-dsh --version                     # 应打印版本号
-Get-Command dsh | Select Source   # 应指向 C:\road\node-global\dsh.cmd
-```
-
-**装坏了怎么办**：
-
-| 现象 | 处理 |
-|---|---|
-| `dsh` 不是内部或外部命令 | 重开一个 PowerShell（PATH 只对新进程生效）；仍不行看 `C:\road\node-global` 里有没有 `dsh.cmd` |
-| npm 安装卡住或报网络错 | 重跑 bootstrap（已装部分会跳过）；或手动 `npm install -g @deepseek-ai/dsh --registry=https://registry.npmjs.org` |
-| 报 engines 不匹配 | `node -v` 必须 ≥ 24.9；不够就重跑 bootstrap 装 Node 24 |
-| 第一次回答特别慢 | 正常，见上面的 profile 说明 |
-
-> `install-chat.ps1` 开头会检查 `dsh` 在不在 PATH，不在就直接报「找不到 dsh；先跑 bootstrap-windows.ps1」。
 
 **做完应该看到**：
 
@@ -147,20 +100,42 @@ Get-Command dsh | Select Source   # 应指向 C:\road\node-global\dsh.cmd
 git version 2.x
 node v24.x.x
 python Python 3.12.x
-dsh 0.2.x
 系统层完成。接下来：...
 ```
 
-再单独确认一次 dsh：
-
-```powershell
-dsh --version
-Get-Command dsh | Select Source    # C:\road\node-global\dsh.cmd
-```
+注意：**这一步不装 dsh**，下一步单独装。
 
 ---
 
-## 4. git clone 拉仓库（约 1 分钟）
+## 4. 安装 dsh（约 1 分钟，自己执行）
+
+dsh 是官方 npm 包，装到**默认位置**即可（`%APPDATA%\npm`），不要装进 `C:\road`：
+
+```powershell
+npm install -g @deepseek-ai/dsh
+dsh --version                      # 打印版本号即成功
+Get-Command dsh | Select Source    # 默认在 C:\Users\<你>\AppData\Roaming\npm\dsh.cmd
+```
+
+- 必须 **Node ≥ 24.9**（第 3 步已装好）；
+- 装完当前窗口就能用；新开的窗口因为系统 PATH 已包含该目录，也能找到；
+- `install-chat.ps1` 会自动把它所在目录写进系统 PATH，并给 `roadchat` 读+执行权限
+  （只给「穿越」上级目录的权限，不会让服务账户看见你的用户目录内容）。
+
+**第一次对话会慢 10–20 秒**：服务在为该访问者生成 `road-sdk` profile 并启动运行时，
+位置在 `C:\road\work\visitors\<访问者id>\home\profiles\road-sdk\`，之后就好了。
+
+**装坏了怎么办**：
+
+| 现象 | 处理 |
+|---|---|
+| `dsh` 不是内部或外部命令 | 重开 PowerShell；仍不行看 `%APPDATA%\npm\dsh.cmd` 在不在 |
+| npm 卡住或网络错 | 重试；或加 `--registry=https://registry.npmjs.org` |
+| 报 engines 不匹配 | `node -v` 必须 ≥ 24.9，否则回第 3 步 |
+
+---
+
+## 5. git clone 拉仓库（约 1 分钟）
 
 仓库现在是**公开**的，直接 clone，不需要任何凭证：
 
@@ -208,7 +183,7 @@ Test-Path C:\road\app\deploy.json    # True
 
 ---
 
-## 5. clone 规范工具，再补两个数据目录（约 40–90 分钟）
+## 6. clone 规范工具，再补两个数据目录（约 40–90 分钟）
 
 规范工具也有远程仓库，先 clone：
 
@@ -224,13 +199,13 @@ git clone https://github.com/Sevenxxxx/guifanchaxun.git C:\road\specs\guifanchax
 本机 guifanchaxun\library_data  →  C:\road\specs\guifanchaxun\library_data
 ```
 
-**建议**：这一步和第 6、7 步并行——传大文件不占终端，另开窗口继续往下做。
+**建议**：这一步和第 7、8 步并行——传大文件不占终端，另开窗口继续往下做。
 
-> 以后更新：`cd C:\road\app; git pull`，然后重启任务（见第 11 节）。数据目录不在 git 里，不会被覆盖。
+> 以后更新：`cd C:\road\app; git pull`，然后重启任务（见第 12 节）。数据目录不在 git 里，不会被覆盖。
 
 ---
 
-## 6. 改规范库自己的配置（1 分钟，**必做**）
+## 7. 改规范库自己的配置（1 分钟，**必做**）
 
 打开 `C:\road\specs\guifanchaxun\tools\guifan-chaxun\config.json`，把两个路径改成服务器上的：
 
@@ -247,7 +222,7 @@ git clone https://github.com/Sevenxxxx/guifanchaxun.git C:\road\specs\guifanchax
 
 ---
 
-## 7. 装服务并启动（约 3–5 分钟）
+## 8. 装服务并启动（约 3–5 分钟）
 
 ```powershell
 cd C:\road\app\scripts\p3\server
@@ -283,7 +258,7 @@ Get-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy | Select TaskName,
 
 ---
 
-## 8. 过门槛（约 1 分钟，**全绿才继续**）
+## 9. 过门槛（约 1 分钟，**全绿才继续**）
 
 ```powershell
 .\acceptance.ps1
@@ -297,7 +272,7 @@ Get-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy | Select TaskName,
 
 ---
 
-## 9. 试用与交付
+## 10. 试用与交付
 
 1. 浏览器打开 `http://<公网IP>:8443/`（有域名就用 `http://你的域名:8443/`）；
 2. 输入 `deploy.json` 里的口令 → 进入聊天页；
@@ -317,7 +292,7 @@ Caddy 会自动完成 ACME 签发，之后同事改用 `https://你的域名/`�
 
 ---
 
-## 10. 出问题怎么查
+## 11. 出问题怎么查
 
 | 现象 | 先看什么 | 常见原因 |
 |---|---|---|
@@ -326,7 +301,7 @@ Caddy 会自动完成 ACME 签发，之后同事改用 `https://你的域名/`�
 | 回答是「模型没有返回内容」 | `Get-ScheduledTask -TaskName RoadModelProxy` | 代理没起，或 `proxy.env` 的 key 不对 |
 | `bootstrap` 报找不到 node | 重开 PowerShell | 新装的 PATH 只对新进程生效 |
 | 脚本一打开就报语法错、中文乱码 | 文件是否 BOM | 用记事本另存为「UTF-8 带 BOM」，否则 5.1 按 GBK 解码 |
-| 规范检索失败 | `C:\road\specs\guifanchaxun\tools\guifan-chaxun\config.json` | 第 6 步的两个路径没改 |
+| 规范检索失败 | `C:\road\specs\guifanchaxun\tools\guifan-chaxun\config.json` | 第 7 步的两个路径没改 |
 | 提示 `dsh` 需要更高 Node | `node -v` | 必须 ≥ 24.9；重跑 bootstrap |
 | 8443 证书告警 | 正常 | 自签证书；上域名后消失 |
 | 8443 打不开但任务显示 Running | `C:\road\caddy\caddy.exe validate --config C:\road\caddy\Caddyfile` | 端口被占、Caddyfile 写坏；也可以在控制台手动 `caddy run` 看报错 |
@@ -347,7 +322,7 @@ Stop-ScheduledTask -TaskName RoadChat; Start-ScheduledTask -TaskName RoadChat
 
 ---
 
-## 11. 日常与回滚
+## 12. 日常与回滚
 
 **日常**：三个任务开机自启、失败每分钟重试，一般不用管。每周看一眼 `C:\road\work` 占用
 （会话数据会增长；不想要就停任务后删掉对应 visitor 目录）。
@@ -359,7 +334,7 @@ Stop-ScheduledTask -TaskName RoadChat; Start-ScheduledTask -TaskName RoadChat
 
 ---
 
-## 12. 上线后的验收（建议当天做完）
+## 13. 上线后的验收（建议当天做完）
 
 - [ ] 两个浏览器各自提问，答案不串台
 - [ ] A 正在回答时 B 点停止，A 不受影响
