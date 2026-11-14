@@ -36,8 +36,6 @@ if ($Deploy) {
     if ($Deploy.paths.etc) { $EtcDir = $Deploy.paths.etc }
     if ($Deploy.paths.specs) { $SpecDir = $Deploy.paths.specs }
     if ($Deploy.service_user) { $ServiceUser = $Deploy.service_user }
-    if ($Deploy.chat_port) { $ChatPort = [int]$Deploy.chat_port }
-    if ($Deploy.proxy_port) { $ProxyPort = [int]$Deploy.proxy_port }
     if ($Deploy.domain) { $Domain = $Deploy.domain }
     if (-not $ApiKey -and $Deploy.api_key) { $ApiKey = $Deploy.api_key }
     $GatePassword = if ($null -ne $Deploy.password) { [string]$Deploy.password } else { 'yhg' }
