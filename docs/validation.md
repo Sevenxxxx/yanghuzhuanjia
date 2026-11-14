@@ -2,6 +2,23 @@
 
 本文件集中维护有日期的验证和历史处理记录；最新复验置于最前。旧路径、旧测试数量和历史人工查看不能作为新版本验证。运行命令与接手入口见 [交接.md](交接.md)。
 
+## 2026-11-14（晚）：改用 Windows Server 2022，补 PowerShell 部署套件
+
+用户把服务器系统改成 Windows Server 2022，原先只写了 Linux 脚本。补三支 PowerShell：
+`bootstrap-windows.ps1`（Node 24 / Python 3.12 / dsh / 依赖 / 账户 / ACL / 防火墙）、
+`install-chat.ps1`（配置、启动脚本、三个计划任务、Caddy 反代与自签证书）、
+`acceptance.ps1`（门槛自检，与 Linux 版一一对应）。
+
+| 检查 | 结果 |
+|---|---|
+| 三支脚本语法 | 用 PowerShell 5.1 的 `Parser::ParseFile` 逐个解析通过 |
+| **踩到并修掉** | 无 BOM 的 UTF-8 在 5.1 里按 GBK 解码，中文使引号错位、整份脚本解析失败 → 三支统一存成 UTF-8 with BOM，`.gitattributes` 增加 `*.ps1 text eol=crlf` |
+| 又修掉 | ACL 里用本地化组名 `Administrators` 不可靠，改成 SID `*S-1-5-32-544` / `*S-1-5-18` |
+| 版本解析 | 实测 `nodejs.org/dist/index.json` 取到 v24.22.3、`python.org/ftp/python/` 取到 3.12.16，脚本里的解析逻辑可用 |
+| Caddy 配置 | 生成逻辑改成按行拼接（原来的 `\n` 在 PowerShell 双引号里不会换行），`caddy validate` 在安装时兜底 |
+
+未验证：三支脚本在真实 Windows Server 上执行、计划任务以 `roadchat` 身份登录并启动、Caddy 自签证书在 8443 的表现、`acceptance.ps1` 全绿。
+
 ## 2026-11-14：页面访问口令
 
 用户要求加一道「简单输入密码」的关卡，默认口令 `yhg`，配置里留可改的占位，改成空就免口令。

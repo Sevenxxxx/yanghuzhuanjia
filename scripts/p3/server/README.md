@@ -1,7 +1,10 @@
-# 服务器部署手册（Linux 主路径）
+# 服务器部署手册（Linux 主路径；Windows 见 [windows-notes.md](windows-notes.md)）
 
 目标：一个域名、一个地址，同事输共享口令使用；每个访问者一个独立运行时，彼此不干扰。
 架构与安全取舍见 [ADR 0005](../../../docs/decisions/0005-server-deployment.md)。
+
+> 若服务器选的是 Windows Server 2022，不要用本页脚本，改看 [windows-notes.md](windows-notes.md)
+> （三支 PowerShell：bootstrap / install-chat / acceptance，流程与验收项一一对应）。
 
 ## 前置：要搬上去的四块东西
 
