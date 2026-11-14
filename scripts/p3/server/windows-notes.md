@@ -1,4 +1,7 @@
-# Windows Server 2022 部署手册（备选路径，已是当前选择）
+# Windows Server 2022 部署手册（脚本参考）
+
+> 第一次部署请照 [docs/部署指南-Windows服务器.md](../../../docs/部署指南-Windows服务器.md) 一步步做；
+> 本页是脚本与目录的速查，以及踩过的坑。
 
 Linux 那套（`bootstrap-linux.sh` / `install-app.sh`）在 Windows 上不能用；这里是对应的三支脚本。
 架构与安全取舍与 Linux 相同，见 [ADR 0005](../../../docs/decisions/0005-server-deployment.md)。
