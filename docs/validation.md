@@ -11,7 +11,11 @@
 - 新增：`scripts/p3/server/README.md`（脚本索引）、`CHANGELOG.md`、部署指南附录 A（已知坑）。
 - 更新：README / 交接 / 架构 / 已知限制 / ADR 0005 / p3 README / AGENTS 对齐 Windows 单目标。
 - 代码：`app.py` 合并 cookie 构造、抽出事件分发、加 `--version`；`page.html` 抽出 `apiJson` 统一 401 处理。
-- 验证：unittest 与 `check_docs` 通过；本机 8091 登录 → 发送 → 停止 → 再发送回归正常；`v0.4.0` 已打 tag。
+- 验证：unittest 192 项通过（新增 5 项事件翻译）、`check_docs` 通过；`v0.4.0` 已打 tag。
+- **本机模型回归未通过**：登录页 / 口令（错 401、对 200）/ 登录后进聊天页 / 新建会话都正常，但真实问答返回
+  「模型没有返回内容」。直连官方接口核对：`GET /models` 与 `POST /chat/completions` 均返回 401
+  `Authentication Fails, Your api key: ****ce6e is invalid`——**本地 `DEEPSEEK_API_KEY` 已失效**，不是代码问题。
+  因此「停止后继续」的完整链路与回答内容本身**本轮未验证**，等换有效 key 后补测。
 
 ## 2026-11-14（夜）：手填项集中到根目录 deploy.json
 
