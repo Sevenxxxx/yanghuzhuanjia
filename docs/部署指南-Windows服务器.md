@@ -333,7 +333,87 @@ Stop-ScheduledTask -TaskName RoadChat; Start-ScheduledTask -TaskName RoadChat
 
 ---
 
-## 12. 日常与回滚
+## 12. 启动、停止与查看状态
+
+服务由三个计划任务组成，**开机自动启动**，平时不用管：
+
+| 任务 | 作用 | 启动顺序 |
+|---|---|---|
+| `RoadModelProxy` | 模型代理（持有真实 key） | 1 |
+| `RoadChat` | 聊天服务（127.0.0.1:8095） | 2 |
+| `RoadCaddy` | 对外入口（HTTP 8443 / 以后 HTTPS 443） | 3 |
+
+### 用脚本操作（推荐）
+
+```powershell
+cd C:\Users\<你>\Desktop\yanghuzhuanjia\scripts\p3\server
+
+.\service.ps1 status     # 看三个任务、健康检查、运行时进程与内存
+.\service.ps1 stop       # 反序停止，并清理残留的 dsh 运行时
+.\service.ps1 start      # 正序启动，等健康检查通过
+.\service.ps1 restart    # 先停后起
+```
+
+`status` 会打印类似：
+
+```
+== 计划任务 ==
+  RoadModelProxy   Running    上次运行 ... 结果 0
+  RoadChat         Running    上次运行 ... 结果 0
+  RoadCaddy        Running    上次运行 ... 结果 0
+
+== 健康检查 ==
+  聊天服务 ok=True 访问者=1 就绪=0 会话=3
+  模型代理 HTTP 200
+
+== dsh 运行时 ==
+  pid 4321  194 MB
+```
+
+### 不想用脚本时的手动命令
+
+```powershell
+# 停止（顺序：入口 → 聊天 → 代理）
+Stop-ScheduledTask -TaskName RoadCaddy
+Stop-ScheduledTask -TaskName RoadChat
+Stop-ScheduledTask -TaskName RoadModelProxy
+
+# 启动（顺序反过来）
+Start-ScheduledTask -TaskName RoadModelProxy
+Start-ScheduledTask -TaskName RoadChat
+Start-ScheduledTask -TaskName RoadCaddy
+
+# 单独看某一个
+Get-ScheduledTask -TaskName RoadChat | Select State
+Get-ScheduledTaskInfo -TaskName RoadChat
+```
+
+> 任务停止是「直接终止进程」，聊天服务的 dsh 子进程可能残留，表现为
+> `Get-Process node` 里还有几个。`service.ps1 stop` 会自动清；手动停的话用
+> `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like '*--profile road-sdk*' }` 找出来再 `Stop-Process`。
+
+### 关掉开机自启（维护时）
+
+```powershell
+Disable-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy
+# 恢复
+Enable-ScheduledTask  -TaskName RoadChat,RoadModelProxy,RoadCaddy
+```
+
+**停止不会丢数据**：会话与咨询记录在 `C:\road\work`，上传的照片也在那里；
+重新 `start` 后访问者会重新建立运行时（第一次对话慢 10–20 秒）。
+
+### 需要重启整个服务器时
+
+```powershell
+Restart-Computer -Force
+```
+
+三个任务会在开机后自动起来；远程桌面断开不影响服务。
+
+---
+
+## 13. 日常与回滚
 
 **日常**：三个任务开机自启、失败每分钟重试，一般不用管。每周看一眼 `C:\road\work` 占用
 （会话数据会增长；不想要就停任务后删掉对应 visitor 目录）。
@@ -345,7 +425,7 @@ Stop-ScheduledTask -TaskName RoadChat; Start-ScheduledTask -TaskName RoadChat
 
 ---
 
-## 13. 上线后的验收（建议当天做完）
+## 14. 上线后的验收（建议当天做完）
 
 - [ ] 两个浏览器各自提问，答案不串台
 - [ ] A 正在回答时 B 点停止，A 不受影响

@@ -19,6 +19,7 @@ Linux 那套（`bootstrap-linux.sh` / `install-app.sh`）在 Windows 上不能�
 | [bootstrap-windows.ps1](bootstrap-windows.ps1) | 装 Node 24、Python 3.12、Git、PyMuPDF/Pillow；建目录、建 `roadchat` 账户、收紧 ACL、放行防火墙（**不装 dsh**） | 新机器一次 |
 | [install-chat.ps1](install-chat.ps1) | 写配置、生成启动脚本、注册三个计划任务（聊天/代理/Caddy）、装 Caddy 并校验配置 | 每次换 key / 改域名 / 重装 |
 | [acceptance.ps1](acceptance.ps1) | 上线门槛自检（程序、工具、服务、权限、密钥） | 每次部署后 |
+| [service.ps1](service.ps1) | `status` / `start` / `stop` / `restart`：按依赖顺序启停，清理残留运行时 | 日常运维 |
 
 ## 步骤
 
@@ -74,7 +75,15 @@ Administrators 与 SYSTEM——agent 以 `roadchat` 运行，读不到。
 | `RoadModelProxy` | SYSTEM | `run-proxy.ps1` → `model_proxy.py --port 8096` |
 | `RoadCaddy` | SYSTEM | `caddy run --config C:\road\caddy\Caddyfile` |
 
-查看状态：`Get-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy | Select TaskName,State`
+启动、停止、看状态统一用 `service.ps1`：
+
+```powershell
+cd C:\Users\<你>\Desktop\yanghuzhuanjia\scripts\p3\server
+.\service.ps1 status     # 任务状态 + 健康检查 + 运行时内存
+.\service.ps1 stop       # 反序停止并清理残留 dsh 运行时
+.\service.ps1 start      # 正序启动并等健康检查
+.\service.ps1 restart
+```
 
 ## 已知坑（都踩过了）
 
