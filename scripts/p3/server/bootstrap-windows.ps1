@@ -1,7 +1,7 @@
 ﻿#Requires -RunAsAdministrator
 <#
   一次性初始化 Windows Server 2022（轻量应用服务器）。
-  装 Node 24、Python 3.12、Git、Python 依赖；建目录与专用账户；收紧 ACL；放行防火墙。
+  校验 Node（服务器自备）、装 Python 3.12 与 Git、Python 依赖；建目录与专用账户；收紧 ACL；放行防火墙。
   dsh 不在这里装，见部署指南第 4 步（你自己用 npm 装到默认位置）。
   用法：在管理员 PowerShell 里执行
       Set-ExecutionPolicy -Scope Process Bypass -Force
@@ -69,24 +69,16 @@ foreach ($dir in @($AppDir, $SpecDir, $WorkDir, $EtcDir, 'C:\road\bin', 'C:\road
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
 
-Step 'Node 24（dsh 要求 >= 24.9，Node 20 已停止维护）'
-$needNode = $true
-if (Get-Command node -ErrorAction SilentlyContinue) {
-    try {
-        $current = [version]((node --version).TrimStart('v'))
-        if ($current -ge [version]'24.9.0') { $needNode = $false }
-    } catch { $needNode = $true }
+Step 'Node（服务器自备，只校验版本）'
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    throw '找不到 node：请先装 Node 24（dsh 要求 >= 24.9），或自行恢复安装再跑本脚本'
 }
-if ($needNode) {
-    $index = Invoke-RestMethod 'https://nodejs.org/dist/index.json' -TimeoutSec 30
-    $lts = $index | Where-Object { $_.version -match '^v24\.' -and $_.lts } | Select-Object -First 1
-    $msi = Join-Path $env:TEMP "node-$($lts.version)-x64.msi"
-    Write-Host "下载 $($lts.version)"
-    Invoke-WebRequest "https://nodejs.org/dist/$($lts.version)/node-$($lts.version)-x64.msi" -OutFile $msi -TimeoutSec 300
-    Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart" -Wait
-    Refresh-Path
+$nodeVersion = [version]((node --version).TrimStart('v'))
+if ($nodeVersion -lt [version]'24.9.0') {
+    throw "Node 版本过低（$nodeVersion）：dsh 要求 >= 24.9，请先升级 Node"
 }
-Write-Host "node $(node --version)"
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw '找不到 npm：Node 安装不完整' }
+Write-Host "node $(node --version) / npm $(npm --version)"
 
 Step 'Python 3.12'
 $needPython = $true
@@ -158,7 +150,7 @@ Write-Host @"
 
 系统层完成。接下来：
   1. 把仓库放到 $AppDir，规范库放到 $SpecDir\guifanchaxun（含 guifansrc 与 library_data）
-  2. 用 npm 装 dsh（部署指南第 4 步，默认位置即可）
+  2. 用 npm 装 dsh（部署指南第 4 步，默认位置即可；Node 用你服务器上已有的）
   3. git clone 仓库与规范工具，补 deploy.json 和两个数据目录
   4. 管理员 PowerShell 执行 .\install-chat.ps1
   5. 执行 .\acceptance.ps1 过门槛
