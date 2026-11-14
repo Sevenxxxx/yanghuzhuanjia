@@ -9,6 +9,8 @@
 param(
     [string]$ApiKey = '',
     [string]$Domain = '',
+    [switch]$Https,
+    [int]$HttpPort = 0,
     [string]$AppDir = 'C:\road\app',
     [string]$WorkDir = 'C:\road\work',
     [string]$EtcDir = 'C:\road\etc',
@@ -37,11 +39,15 @@ if ($Deploy) {
     if ($Deploy.paths.specs) { $SpecDir = $Deploy.paths.specs }
     if ($Deploy.service_user) { $ServiceUser = $Deploy.service_user }
     if ($Deploy.domain) { $Domain = $Deploy.domain }
+    if ($null -ne $Deploy.https) { $Https = [bool]$Deploy.https }
+    if ($Deploy.http_port) { $HttpPort = [int]$Deploy.http_port }
     if (-not $ApiKey -and $Deploy.api_key) { $ApiKey = $Deploy.api_key }
     $GatePassword = if ($null -ne $Deploy.password) { [string]$Deploy.password } else { 'yhg' }
 } else {
     $GatePassword = 'yhg'
 }
+$UseHttps = $Https.IsPresent
+if ($HttpPort -le 0) { $HttpPort = 8443 }
 if (-not $ApiKey) { throw '没有 API key：在 deploy.json 里填 api_key，或用 -ApiKey 传入' }
 if ($ApiKey -notmatch '^sk-') { throw "api_key 看起来不像真的（当前：$($ApiKey.Substring(0, [Math]::Min(6, $ApiKey.Length)))…）" }
 
@@ -134,19 +140,28 @@ if (-not (Test-Path (Join-Path $caddyDir 'caddy.exe'))) {
 }
 
 $lines = @()
-if ($Domain) {
-    $lines += "$Domain {"
+if ($UseHttps) {
+    if ($Domain) {
+        $lines += "$Domain {"
+        $lines += "    reverse_proxy 127.0.0.1:$ChatPort {"
+        $lines += '        flush_interval -1'
+        $lines += '    }'
+        $lines += '}'
+    }
+    $lines += ':8443 {'
+    $lines += '    tls internal'
+    $lines += "    reverse_proxy 127.0.0.1:$ChatPort {"
+    $lines += '        flush_interval -1'
+    $lines += '    }'
+    $lines += '}'
+} else {
+    # 纯 HTTP：不写主机名，避免 Caddy 自动跳 HTTPS；域名与 IP 都走同一个端口
+    $lines += ":$HttpPort {"
     $lines += "    reverse_proxy 127.0.0.1:$ChatPort {"
     $lines += '        flush_interval -1'
     $lines += '    }'
     $lines += '}'
 }
-$lines += ':8443 {'
-$lines += '    tls internal'
-$lines += "    reverse_proxy 127.0.0.1:$ChatPort {"
-$lines += '        flush_interval -1'
-$lines += '    }'
-$lines += '}'
 Set-Content -Path 'C:\road\caddy\Caddyfile' -Encoding utf8 -Value $lines
 & 'C:\road\caddy\caddy.exe' validate --config 'C:\road\caddy\Caddyfile' --adapter caddyfile
 if ($LASTEXITCODE -ne 0) { throw 'Caddyfile 校验失败' }
@@ -168,7 +183,7 @@ Write-Host @"
 已启动。检查：
   Invoke-RestMethod http://127.0.0.1:$ChatPort/api/health
   Get-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy | Select TaskName,State
-  试用地址： https://<公网IP>:8443/   （自签证书，浏览器会提示不安全）
-$(if ($Domain) { "  域名地址： https://$Domain/   （Caddy 自动申请证书，需要 80 端口可达）" })
+$(if ($UseHttps) { "  试用地址： https://<公网IP>:8443/   （自签证书，浏览器会提示不安全）" } else { "  地址： http://<公网IP>:$HttpPort/   （纯 HTTP；口令与内容在链路上是明文）" })
+$(if ($Domain) { if ($UseHttps) { "  域名地址： https://$Domain/   （Caddy 自动申请证书，需要 80 端口可达）" } else { "  域名地址： http://${Domain}:$HttpPort/   （需要控制台放行该端口；用 80 需备案）" } })
 完成后再跑 acceptance.ps1。
 "@ -ForegroundColor Green

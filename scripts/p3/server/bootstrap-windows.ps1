@@ -113,6 +113,7 @@ function Ensure-Rule([string]$name, [int]$port) {
     }
 }
 Ensure-Rule 'RoadChat 8443（试用）' 8443
+Ensure-Rule 'RoadChat 80（HTTP）' 80
 Ensure-Rule 'RoadChat 443（域名）' 443
 
 Write-Host @"
