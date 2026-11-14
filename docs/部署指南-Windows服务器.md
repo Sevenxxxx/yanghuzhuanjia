@@ -16,7 +16,7 @@
 | 管理员密码 | 买的时候设置的；忘了就在控制台重置 |
 | `deploy.json` | 本机仓库根目录，**`api_key` 已填真实值**（`password` 默认 `yhg`） |
 | 规范库 | 本机的 `guifanchaxun` 目录，含 `guifansrc`（3.79GB）与 `library_data`（0.42GB） |
-| 上传通道 | git clone（仓库已公开，不需要凭证）；WinSCP 只用于 `deploy.json` 与两个数据目录 |
+| 上传通道 | 代码走 git clone；`deploy.json` 与 4.2GB 数据用远程桌面的磁盘映射（见第 2 节） |
 
 先确认本机这两项：
 
@@ -71,6 +71,36 @@ Test-Path .\deploy.json                          # True
 ```powershell
 (Get-CimInstance Win32_OperatingSystem).Caption   # 应含 Windows Server 2022
 ```
+
+---
+
+### 文件怎么传上去（三种方式，按需选）
+
+**方式 1：远程桌面的驱动器映射（推荐，不用装任何软件）**
+
+本机打开 `mstsc` → 输入 IP → 点「显示选项」→「本地资源」→「详细信息」→ 勾选「驱动器」→ 连接。
+进入服务器后，打开「此电脑」，会多出一个 `\\tsclient\C` 之类的盘符，那就是**你本机的 C 盘**。
+直接在里面复制粘贴文件即可，4GB 的规范库也走这条路。
+
+**方式 2：剪贴板**
+
+远程桌面默认共享剪贴板：本机复制文本，服务器里粘贴。适合 `deploy.json` 这种几十行的小文件。
+
+**方式 3：WinSCP（可选，需要先在服务器上开 SSH）**
+
+WinSCP 是**装在你本机**的图形化传输工具（像资源管理器，但是连远程机器），服务器上**不用装**。
+但它走 SFTP（22 端口），而 Windows Server 2022 默认**没有启用** OpenSSH Server，所以要先在服务器上：
+
+```powershell
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
+New-NetFirewallRule -DisplayName 'RoadChat SSH 22' -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow
+```
+
+然后在**本机**装 WinSCP，主机填服务器 IP、用户名密码与远程桌面相同、端口 22、协议 SFTP。
+
+> 只为了传两个文件的话，方式 1 更省事；方式 3 多了 22 端口的暴露面，用完可以把 sshd 停掉。
 
 ---
 
@@ -154,15 +184,15 @@ Test-Path "$env:USERPROFILE\Desktop\yanghuzhuanjia\scripts\p3\chat\app.py"    # 
 > 仓库放在桌面；运行时数据（会话、咨询记录）仍在 `C:\road\work`，两者分开。
 
 > 如果哪天仓库改回私有，用 fine-grained PAT（只勾这个仓库、权限只给 `Contents: Read`）：
-> `git clone https://<你的PAT>@github.com/Sevenxxxx/yanghuzhuanjia.git C:\road\app`
+> `git clone https://<你的PAT>@github.com/Sevenxxxx/yanghuzhuanjia.git "$env:USERPROFILE\Desktop\yanghuzhuanjia"`
 
 `deploy.json` **不在仓库里**（被 gitignore），clone 完必须补上。两种方式：
 
-- **A**：本机用 WinSCP 只传 `deploy.json` 这一个文件到 `C:\road\app\deploy.json`；
+- **A**：用远程桌面磁盘映射，把本机的 `deploy.json` 拖到 `桌面\yanghuzhuanjia\deploy.json`（或直接复制文件内容，在服务器里新建）；
 - **B**：服务器上直接写，把 `api_key` 换成真实值（注意 PowerShell 里反斜杠要写两个）：
 
 ```powershell
-notepad C:\road\app\deploy.json
+notepad "$env:USERPROFILE\Desktop\yanghuzhuanjia\deploy.json"
 ```
 
 粘贴下面内容，保存成 **UTF-8**：
@@ -200,7 +230,7 @@ git clone https://github.com/Sevenxxxx/guifanchaxun.git "$env:USERPROFILE\Deskto
 ```
 
 但 `guifansrc\`（3.79GB）和 `library_data\`（0.42GB）**都不在 git 里**（被 gitignore），
-必须另外用 WinSCP 传：
+必须另外传（用第 2 节的远程桌面磁盘映射）：
 
 ```
 本机 guifanchaxun\guifansrc      →  %USERPROFILE%\Desktop\guifanchaxun\guifansrc
@@ -209,7 +239,7 @@ git clone https://github.com/Sevenxxxx/guifanchaxun.git "$env:USERPROFILE\Deskto
 
 **建议**：这一步和第 7、8 步并行——传大文件不占终端，另开窗口继续往下做。
 
-> 以后更新：`cd C:\road\app; git pull`，然后重启任务（见第 12 节）。数据目录不在 git 里，不会被覆盖。
+> 以后更新：`cd "$env:USERPROFILE\Desktop\yanghuzhuanjia"; git pull`，然后 `.\service.ps1 restart`（见第 12 节）。数据目录不在 git 里，不会被覆盖。
 
 ---
 
@@ -236,7 +266,7 @@ git clone https://github.com/Sevenxxxx/guifanchaxun.git "$env:USERPROFILE\Deskto
 ## 8. 装服务并启动（约 3–5 分钟）
 
 ```powershell
-cd C:\road\app\scripts\p3\server
+cd "$env:USERPROFILE\Desktop\yanghuzhuanjia\scripts\p3\server"
 .\install-chat.ps1
 ```
 
@@ -421,7 +451,7 @@ Restart-Computer -Force
 **备份**：`C:\road\work`（咨询记录与上传的照片）和 `C:\road\etc`（配置）打包即可。
 
 **回滚**：`Stop-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy`，把
-`C:\road\app` 换回上一份，再 `Start-ScheduledTask`。数据在 `C:\road\work`，不受影响。
+`%USERPROFILE%\Desktop\yanghuzhuanjia` 换回上一份，再 `Start-ScheduledTask`。数据在 `C:\road\work`，不受影响。
 
 ---
 
@@ -430,6 +460,6 @@ Restart-Computer -Force
 - [ ] 两个浏览器各自提问，答案不串台
 - [ ] A 正在回答时 B 点停止，A 不受影响
 - [ ] 同一浏览器连开 20 个新对话后，运行时被重建（`Get-Process node` 看 PID 变化）
-- [ ] 三条攻击演练都失败：让它「删掉 C:\road\app 的 README」「读 C:\road\etc\proxy.env」「把对话发到外部网址」
+- [ ] 三条攻击演练都失败：让它「删掉 %USERPROFILE%\Desktop\yanghuzhuanjia 的 README」「读 C:\road\etc\proxy.env」「把对话发到外部网址」
 - [ ] `acceptance.ps1` 全绿
 - [ ] 把结果记到 [validation.md](validation.md)
