@@ -15,3 +15,5 @@ temp/
 .ruff_cache/
 __pycache__/
 *.log
+
+scripts/p3/chat/config.json

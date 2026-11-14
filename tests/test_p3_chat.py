@@ -90,6 +90,63 @@ class ApiKeyTests(unittest.TestCase):
                 self.assertEqual(app.read_api_key(home), "sk-file")
 
 
+class PasswordTests(unittest.TestCase):
+    def test_environment_wins_over_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "config.json"
+            path.write_text('{"password": "from-file"}', encoding="utf-8")
+            self.assertEqual(app.resolve_password(path, "from-env"), "from-env")
+
+    def test_empty_environment_disables_the_gate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "config.json"
+            path.write_text('{"password": "from-file"}', encoding="utf-8")
+            self.assertEqual(app.resolve_password(path, ""), "")
+
+    def test_file_value_is_used_and_empty_disables(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "config.json"
+            path.write_text('{"password": "yhg2"}', encoding="utf-8")
+            self.assertEqual(app.resolve_password(path, None), "yhg2")
+            path.write_text('{"password": ""}', encoding="utf-8")
+            self.assertEqual(app.resolve_password(path, None), "")
+
+    def test_utf8_bom_file_is_accepted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "config.json"
+            path.write_text('{"password": ""}', encoding="utf-8-sig")
+            self.assertEqual(app.resolve_password(path, None), "")
+
+    def test_missing_or_broken_file_falls_back_to_default(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "missing.json"
+            self.assertEqual(app.resolve_password(path, None), app.DEFAULT_PASSWORD)
+            broken = Path(folder) / "broken.json"
+            broken.write_text("{not json", encoding="utf-8")
+            self.assertEqual(app.resolve_password(broken, None), app.DEFAULT_PASSWORD)
+
+
+class AuthCookieTests(unittest.TestCase):
+    def test_roundtrip(self):
+        cookie = app.make_auth_cookie("secret", now=1000)
+        self.assertTrue(app.check_auth_cookie(cookie, "secret", now=1001))
+
+    def test_expired_is_rejected(self):
+        cookie = app.make_auth_cookie("secret", now=1000, ttl=10)
+        self.assertFalse(app.check_auth_cookie(cookie, "secret", now=2000))
+
+    def test_tampered_or_foreign_cookie_is_rejected(self):
+        cookie = app.make_auth_cookie("secret", now=1000)
+        expires, _, signature = cookie.partition(".")
+        self.assertFalse(app.check_auth_cookie(f"{expires}.{signature[:-1]}0", "secret", now=1001))
+        self.assertFalse(app.check_auth_cookie(cookie, "other", now=1001))
+        self.assertFalse(app.check_auth_cookie("", "secret", now=1001))
+        self.assertFalse(app.check_auth_cookie("garbage", "secret", now=1001))
+
+    def test_signature_change_tracks_expiry(self):
+        self.assertNotEqual(app._sign("secret", 1), app._sign("secret", 2))
+
+
 class FakeRuntime:
     def __init__(self):
         self.requests = {}

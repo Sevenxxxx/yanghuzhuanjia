@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
 import queue
@@ -746,6 +748,128 @@ class ChatService:
 
 # ---------------------------------------------------------------- HTTP
 
+# ---------------------------------------------------------------- 访问口令
+
+DEFAULT_PASSWORD = "yhg"
+
+
+def resolve_password(config_path, env_value):
+    """口令优先级：环境变量（空值也算）> config.json > 默认值；空字符串表示不设口令。"""
+    if env_value is not None:
+        return env_value.strip()
+    path = Path(config_path)
+    if path.is_file():
+        try:
+            # utf-8-sig：用记事本另存为 UTF-8 会带 BOM，不能因此回落成默认口令
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return DEFAULT_PASSWORD
+        return str(data.get("password", DEFAULT_PASSWORD) or "").strip()
+    return DEFAULT_PASSWORD
+
+
+def auth_secret(root):
+    """签名密钥落盘复用：服务重启后已登录的浏览器不用重新输口令。"""
+    path = Path(root) / "auth.key"
+    if path.is_file():
+        value = path.read_text(encoding="utf-8").strip()
+        if value:
+            return value
+    value = uuid.uuid4().hex + uuid.uuid4().hex
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(value, encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return value
+
+
+def _sign(secret, expires):
+    return hmac.new(secret.encode(), str(expires).encode(), hashlib.sha256).hexdigest()
+
+
+def make_auth_cookie(secret, now=None, ttl=7 * 24 * 3600):
+    expires = int((time.time() if now is None else now) + ttl)
+    return f"{expires}.{_sign(secret, expires)}"
+
+
+def check_auth_cookie(value, secret, now=None):
+    if not value or "." not in value:
+        return False
+    expires_text, _, signature = value.partition(".")
+    try:
+        expires = int(expires_text)
+    except ValueError:
+        return False
+    if expires < (time.time() if now is None else now):
+        return False
+    return hmac.compare_digest(signature, _sign(secret, expires))
+
+
+LOGIN_PAGE = """<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>道路养护咨询助手</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f2f2f7; --card:#ffffff; --label:#1d1d1f; --label-2:#6e6e73;
+          --separator:rgba(60,60,67,0.16); --blue:#007aff; --fill:rgba(118,118,128,0.12); }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#000000; --card:#1c1c1e; --label:#f5f5f7; --label-2:#98989d;
+            --separator:rgba(84,84,88,0.6); --blue:#0a84ff; --fill:rgba(118,118,128,0.24); }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin:0; display:flex; align-items:center; justify-content:center; background:var(--bg);
+         color:var(--label); font:14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text",
+         "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  form { width: min(340px, calc(100vw - 48px)); background:var(--card); border-radius:18px;
+         padding:24px; box-shadow:0 1px 2px rgba(0,0,0,0.06); }
+  h1 { margin:0 0 6px; font-size:17px; font-weight:600; }
+  p { margin:0 0 16px; color:var(--label-2); }
+  input { width:100%; height:40px; padding:0 12px; font:inherit; color:var(--label);
+          background:var(--fill); border:1px solid transparent; border-radius:10px; outline:none; }
+  input:focus { border-color:var(--blue); }
+  button { margin-top:12px; width:100%; height:40px; font:inherit; font-weight:500; color:#fff;
+           background:var(--blue); border:0; border-radius:10px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .error { margin-top:10px; color:#ff3b30; min-height:18px; font-size:13px; }
+</style></head>
+<body>
+<form id="gate" autocomplete="off">
+  <h1>道路养护咨询助手</h1>
+  <p>请输入访问口令</p>
+  <input id="password" type="password" inputmode="text" autocomplete="current-password" required>
+  <button id="submit" type="submit">进入</button>
+  <div class="error" id="error"></div>
+</form>
+<script>
+  const form = document.getElementById('gate');
+  const input = document.getElementById('password');
+  const submit = document.getElementById('submit');
+  const error = document.getElementById('error');
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    error.textContent = '';
+    try {
+      const response = await fetch('api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: input.value }),
+      });
+      if (response.ok) { location.replace('/'); return; }
+      error.textContent = response.status === 429 ? '尝试太频繁，稍后再试' : '口令不对';
+    } catch (failure) {
+      error.textContent = '连不上服务';
+    }
+    submit.disabled = false;
+    input.select();
+  });
+  input.focus();
+</script>
+</body></html>"""
+
 COOKIE_NAME = "rc_vid"
 COOKIE_MAX_AGE = 30 * 24 * 3600
 
@@ -756,7 +880,11 @@ def _cookie_secure():
 
 class Handler(BaseHTTPRequestHandler):
     service: ChatService = None  # set in main()
-    server_version = "road-chat/0.3"
+    password = ""                # 空表示不设口令
+    secret = ""                  # 口令 cookie 的签名密钥
+    server_version = "road-chat/0.4"
+    _attempts = {}               # ip -> [次数, 首次时间]
+    _attempts_lock = threading.Lock()
 
     def log_message(self, fmt, *args):  # 安静一点
         return
@@ -786,6 +914,57 @@ class Handler(BaseHTTPRequestHandler):
             flags += "; Secure"
         return ("Set-Cookie", flags)
 
+    def _authorized(self):
+        if not self.password:
+            return True
+        raw = self.headers.get("cookie") or ""
+        for part in raw.split(";"):
+            name, _, value = part.strip().partition("=")
+            if name == "rc_auth" and check_auth_cookie(value.strip(), self.secret):
+                return True
+        return False
+
+    def _set_auth_cookie(self):
+        flags = f"rc_auth={make_auth_cookie(self.secret)}; Path=/; Max-Age={COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax"
+        if _cookie_secure():
+            flags += "; Secure"
+        return ("Set-Cookie", flags)
+
+    def _too_many_attempts(self):
+        ip = self.client_address[0]
+        with Handler._attempts_lock:
+            count, first = Handler._attempts.get(ip, (0, time.time()))
+            if time.time() - first > 60:
+                count, first = 0, time.time()
+            return count >= 5
+
+    def _record_attempt(self, success):
+        ip = self.client_address[0]
+        with Handler._attempts_lock:
+            if success:
+                Handler._attempts.pop(ip, None)
+                return
+            count, first = Handler._attempts.get(ip, (0, time.time()))
+            if time.time() - first > 60:
+                count, first = 0, time.time()
+            Handler._attempts[ip] = (count + 1, first)
+
+    def _login(self, payload):
+        if self._too_many_attempts():
+            self._json(429, {"error": "尝试太频繁，稍后再试"})
+            return
+        given = str(payload.get("password") or "")
+        if not self.password or hmac.compare_digest(given, self.password):
+            self._record_attempt(True)
+            headers = [self._set_auth_cookie()]
+            if self._cookie_id() is None:
+                headers.append(self._set_cookie(uuid.uuid4().hex))
+            self._json(200, {"ok": True}, headers)
+            return
+        self._record_attempt(False)
+        time.sleep(0.4)
+        self._json(401, {"error": "口令不对"})
+
     def _visitor(self):
         visitor_id = self._cookie_id()
         if not visitor_id:
@@ -794,6 +973,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
+            if not self._authorized():
+                body = LOGIN_PAGE.encode("utf-8")
+                self.send_response(200)
+                self.send_header("content-type", "text/html; charset=utf-8")
+                self.send_header("content-length", str(len(body)))
+                self.send_header("cache-control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return
             headers = []
             if self._cookie_id() is None:
                 visitor_id = uuid.uuid4().hex
@@ -819,6 +1007,12 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
             self._json(400, {"error": "请求不是合法 JSON"})
+            return
+        if self.path == "/api/login":
+            self._login(payload)
+            return
+        if not self._authorized():
+            self._json(401, {"error": "需要口令；刷新页面重进"})
             return
         if self.path == "/api/new":
             visitor_id, visitor = self._visitor()
@@ -904,6 +1098,9 @@ def main(argv=None):
 
     root = Path(args.home)
     root.mkdir(parents=True, exist_ok=True)
+    password = resolve_password(HERE / "config.json", os.environ.get("ROAD_CHAT_PASSWORD"))
+    Handler.password = password
+    Handler.secret = auth_secret(root) if password else ""
     service = ChatService(root, read_api_key(root))
     Handler.service = service
     server = ThreadingHTTPServer((host, args.port), Handler)
@@ -913,6 +1110,7 @@ def main(argv=None):
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(url, encoding="utf-8")
     print(f"道路养护专家已启动：{url}（按访问者隔离运行时）", flush=True)
+    print("口令：已启用（登录页输入）" if password else "口令：未启用（config.json 里 password 为空）", flush=True)
     print("停止：Ctrl+C", flush=True)
     try:
         server.serve_forever()

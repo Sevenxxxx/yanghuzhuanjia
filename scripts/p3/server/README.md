@@ -60,7 +60,11 @@ DEEPSEEK_API_KEY=proxy-held
 ROAD_CHAT_PATCH=/srv/road/app/scripts/p3/server/proxy.patch.yml
 ROAD_EXPERT_CONFIG=/etc/road-chat/config.json
 ROAD_CHAT_COOKIE_SECURE=1
+ROAD_CHAT_PASSWORD=yhg
 ```
+
+`ROAD_CHAT_PASSWORD` 是页面登录口令，优先级高于 `scripts/p3/chat/config.json`；写成空值
+（`ROAD_CHAT_PASSWORD=`）表示不要口令。服务器上建议改掉默认的 `yhg`。
 
 > 注意：`DEEPSEEK_BASE_URL` 对 dsh 的 Messages 适配器**不生效**（实测过），必须用
 > `ROAD_CHAT_PATCH` 指向 `proxy.patch.yml`；否则前端会带着占位 key 直连官方接口，

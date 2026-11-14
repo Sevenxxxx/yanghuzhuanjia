@@ -1007,6 +1007,7 @@
           images: outgoing.map((i) => ({ mimeType: i.mimeType, data: i.dataUrl.split(',')[1] })),
         }),
       });
+      if (response.status === 401) { location.replace('/'); return; }
       if (!response.ok || !response.body) {
         const detail = await response.json().catch(() => ({}));
         throw new Error(detail.error || ('请求失败：' + response.status));
@@ -1149,6 +1150,7 @@
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ requestId: payload.requestId, answers }),
         });
+        if (response.status === 401) { location.replace('/'); return; }
         if (!response.ok) {
           const detail = await response.json().catch(() => ({}));
           throw new Error(detail.error || '回答没有送达');
@@ -1186,7 +1188,9 @@
     try {
       const state = await fetch('/api/health').then((r) => r.json());
       if (!state.ok) { showError(state.error || '后端还没准备好'); return; }
-      const fresh = await fetch('/api/new', { method: 'POST' }).then((r) => r.json());
+      const freshResponse = await fetch('/api/new', { method: 'POST' });
+      if (freshResponse.status === 401) { location.replace('/'); return; }
+      const fresh = await freshResponse.json();
       sessionId = fresh.sessionId;
       input.focus();
     } catch (error) {
