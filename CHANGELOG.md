@@ -2,6 +2,15 @@
 
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
+
+## 0.4.1（2026-11-14）
+
+- 新增**空闲回收**：访问者连续 30 分钟无请求即停运行时，会话保留，下次说话自动恢复（`ROAD_CHAT_IDLE_SECONDS` 可调，0 关闭）。
+- 新增**并发上限 8 人**：第 9 个访问者收到 503 与「暂时已超过使用人数上限（8人），请稍后再试」。
+- 重建阈值 20 → 8，运行时不再越养越胖。
+- `bootstrap-windows.ps1` 增加 Defender 排除与页面文件检查；`install-chat.ps1` 写入空闲回收时长。
+- 新增 PowerShell BOM 守卫测试，防止脚本被存成无 BOM 后在 5.1 上解析失败。
+
 ## 0.4.0（2026-11-14）
 
 - 新增 Windows Server 2022 部署套件：`bootstrap-windows.ps1`、`install-chat.ps1`、`acceptance.ps1`、`service.ps1`，

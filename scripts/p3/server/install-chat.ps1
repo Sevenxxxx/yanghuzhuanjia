@@ -115,6 +115,7 @@ Set-Content -Path (Join-Path $EtcDir 'roadchat.env') -Encoding utf8 -Value @(
     "ROAD_CHAT_PATCH=$EtcDir\proxy.patch.yml"
     "ROAD_EXPERT_CONFIG=$EtcDir\config.json"
     "ROAD_CHAT_PASSWORD=$GatePassword"
+    'ROAD_CHAT_IDLE_SECONDS=1800'
 )
 Set-Content -Path (Join-Path $EtcDir 'proxy.env') -Encoding utf8 -Value "DEEPSEEK_API_KEY=$ApiKey"
 Set-Content -Path (Join-Path $EtcDir 'proxy.patch.yml') -Encoding utf8 -Value @(

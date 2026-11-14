@@ -146,6 +146,36 @@ Ensure-Rule 'RoadChat 8443（试用）' 8443
 Ensure-Rule 'RoadChat 80（HTTP）' 80
 Ensure-Rule 'RoadChat 443（域名）' 443
 
+
+Step '系统检查：Defender 排除与页面文件'
+if (Get-Command Add-MpPreference -ErrorAction SilentlyContinue) {
+    foreach ($exclusion in @($WorkDir, $AppDir)) {
+        if (Test-Path $exclusion) {
+            try {
+                Add-MpPreference -ExclusionPath $exclusion -ErrorAction Stop
+                Write-Host "Defender 已排除：$exclusion"
+            } catch {
+                Write-Host "Defender 排除失败（可能被篡改保护限制）：$exclusion" -ForegroundColor DarkYellow
+            }
+        }
+    }
+} else {
+    Write-Host '未检测到 Windows Defender，跳过排除' -ForegroundColor DarkYellow
+}
+
+$pageFiles = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue
+$autoManaged = (Get-CimInstance Win32_ComputerSystem).AutomaticManagedPagefile
+if ($pageFiles) {
+    $totalMb = ($pageFiles | Measure-Object -Property AllocatedBaseSize -Sum).Sum
+    $detail = ($pageFiles | ForEach-Object { "$($_.Name) $($_.AllocatedBaseSize)MB" }) -join '；'
+    Write-Host "页面文件：$detail（自动管理：$autoManaged）"
+    if ($totalMb -lt 4096) {
+        Write-Host '页面文件小于 4GB：内存吃紧时容易被杀进程，建议按部署指南设为 4–8GB（需重启）' -ForegroundColor Yellow
+    }
+} else {
+    Write-Host '没有检测到页面文件：内存吃紧时可能被杀进程，建议按部署指南设置 4–8GB（需重启）' -ForegroundColor Yellow
+}
+
 Write-Host @"
 
 系统层完成。接下来：

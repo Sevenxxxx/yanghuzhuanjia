@@ -183,6 +183,9 @@ def make_visitor():
     visitor.sessions = 0
     visitor.runtime = FakeRuntime()
     visitor.ready = True
+    visitor._ready = threading.Event()
+    visitor.session_id = ""
+    visitor._resume_on_spawn = False
     visitor.error = None
     visitor.restarts = []
     visitor.restart = lambda resume_session=None: visitor.restarts.append(resume_session)
@@ -256,6 +259,64 @@ class VisitorTests(unittest.TestCase):
         visitor.new_session()
         time.sleep(0.05)
         self.assertEqual(visitor.restarts, [])
+
+
+class IdleReclaimTests(unittest.TestCase):
+    """空闲回收：停运行时、留会话，下次说话再恢复。"""
+
+    def test_idle_visitor_is_reclaimed_and_resumes_later(self):
+        visitor = make_visitor()
+        visitor.session_id = "web-abc"
+        visitor.last_used = 0
+        self.assertTrue(visitor.reclaim_if_idle(now=10000, idle_seconds=60))
+        self.assertIsNone(visitor.runtime)
+        self.assertTrue(visitor._resume_on_spawn)
+
+    def test_recent_activity_keeps_runtime(self):
+        visitor = make_visitor()
+        visitor.last_used = 9990
+        self.assertFalse(visitor.reclaim_if_idle(now=10000, idle_seconds=60))
+        self.assertIsNotNone(visitor.runtime)
+
+    def test_running_turn_blocks_reclaim(self):
+        visitor = make_visitor()
+        visitor._active = {"web-a": app.Turn("web-a")}
+        visitor.last_used = 0
+        self.assertFalse(visitor.reclaim_if_idle(now=10000, idle_seconds=60))
+        self.assertIsNotNone(visitor.runtime)
+
+    def test_new_session_clears_resume_flag(self):
+        visitor = make_visitor()
+        visitor._resume_on_spawn = True
+        session_id = visitor.new_session()
+        self.assertFalse(visitor._resume_on_spawn)
+        self.assertEqual(visitor.session_id, session_id)
+
+
+class LimitAndReaperTests(unittest.TestCase):
+    def fill(self, service, count=None):
+        total = count or app.ChatService.MAX_VISITORS
+        return [service.visitor(f"{index:032x}") for index in range(total)]
+
+    def test_visitor_over_limit_gets_friendly_message(self):
+        service = app.ChatService(Path("."), "sk-test")
+        self.fill(service)
+        with self.assertRaises(app.ChatError) as raised:
+            service.visitor("f" * 32)
+        message = str(raised.exception)
+        self.assertIn("使用人数上限", message)
+        self.assertIn(str(app.ChatService.MAX_VISITORS), message)
+
+    def test_reaper_stops_idle_runtimes(self):
+        service = app.ChatService(Path("."), "sk-test")
+        visitors = self.fill(service, 2)
+        for visitor in visitors:
+            visitor.runtime = FakeRuntime()
+            visitor.ready = True
+            visitor.last_used = 0
+        self.assertEqual(service.reap_idle(60, now=10000), 2)
+        for visitor in visitors:
+            self.assertIsNone(visitor.runtime)
 
 
 class PoolTests(unittest.TestCase):

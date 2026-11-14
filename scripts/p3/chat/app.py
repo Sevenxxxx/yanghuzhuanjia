@@ -31,11 +31,11 @@ sys.path.insert(0, str(P3))
 from local_web import local_addresses, pick_lan_address  # noqa: E402
 
 PROFILE = "road-sdk"
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 DEFAULT_PORT = 8091
 DEFAULT_ROOT = Path.home() / "dsh-roads"
 # 同一访问者累计开这么多新对话且空闲时，重建运行时，避免会话无限堆积。
-REBUILD_AFTER = 20
+REBUILD_AFTER = 8
 PAGE = HERE / "page.html"
 WEB_PATCH = P3 / "road_expert.patch.yml"
 
@@ -446,6 +446,8 @@ class Visitor:
 
     def __init__(self, root, visitor_id, api_key):
         self.id = visitor_id
+        self.session_id = ""       # 当前对话；回收后用它恢复
+        self._resume_on_spawn = False
         self.root = Path(root)
         self.dir = self.root / "visitors" / visitor_id
         self.home = self.dir / "home"
@@ -493,6 +495,12 @@ class Visitor:
             self._ready.clear()
             try:
                 self.runtime = self._spawn()
+                if self._resume_on_spawn and self.session_id:
+                    try:
+                        self.runtime.call("session/resume", {"sessionId": self.session_id}, timeout=180)
+                    except ChatError:
+                        pass
+                self._resume_on_spawn = False
                 self.error = None
                 self.ready = True
             except Exception as error:
@@ -534,6 +542,19 @@ class Visitor:
         finally:
             self._lifecycle.release()
 
+    def reclaim_if_idle(self, now, idle_seconds):
+        """空闲够久且没有进行中的回答：停掉运行时，记下会话，等下次说话再恢复。"""
+        with self._guard:
+            if self._active:
+                return False
+        if self.runtime is None or not self.ready:
+            return False
+        if now - self.last_used < idle_seconds:
+            return False
+        self._resume_on_spawn = bool(self.session_id)
+        self._kill_runtime()
+        return True
+
     # -- 会话与轮次
     def lock_for(self, session_id):
         with self._guard:
@@ -572,7 +593,9 @@ class Visitor:
             # 重建放在后台：不阻塞这次开新对话，下一条消息会自动拉起新运行时
             threading.Thread(target=self.restart, name=f"rebuild-{self.id}", daemon=True).start()
             self.sessions = 1
-        return f"web-{uuid.uuid4().hex[:12]}"
+        self.session_id = f"web-{uuid.uuid4().hex[:12]}"
+        self._resume_on_spawn = False
+        return self.session_id
 
     def stop(self, session_id):
         """停止这一轮：只影响本访问者。SDK 没有 cancel，重启自己的运行时才能真正停住生成。"""
@@ -613,6 +636,7 @@ class Visitor:
 
     def turn(self, session_id, blocks, emit):
         self.last_used = time.time()
+        self.session_id = session_id
         if not session_id:
             raise ChatError("缺少会话标识；刷新页面重开一次")
         self.ensure()
@@ -710,12 +734,14 @@ class ChatService:
     """按访问者分池：一个访问者一个运行时，互不阻塞。"""
 
     MAX_VISITORS = 8
+    LIMIT_MESSAGE = f"暂时已超过使用人数上限（{MAX_VISITORS}人），请稍后再试"
 
     def __init__(self, root, api_key):
         self.root = Path(root)
         self.api_key = api_key
         self._visitors = {}
         self._guard = threading.Lock()
+        self._stopped = threading.Event()
 
     def visitor(self, visitor_id):
         with self._guard:
@@ -723,15 +749,32 @@ class ChatService:
             if existing is not None:
                 return existing
             if len(self._visitors) >= self.MAX_VISITORS:
-                idle = [v for v in self._visitors.values() if not v._active]
-                if not idle:
-                    raise ChatError("同时在用的人数已达上限，请稍后再试")
-                oldest = min(idle, key=lambda v: v.last_used)
-                self._visitors.pop(oldest.id, None)
-                oldest.shutdown()
+                raise ChatError(self.LIMIT_MESSAGE)
             created = Visitor(self.root, visitor_id, self.api_key)
             self._visitors[visitor_id] = created
             return created
+
+    def start_reaper(self, idle_seconds, interval=60.0):
+        """空闲回收：超过 idle_seconds 没说话就停运行时；0 表示关闭。"""
+        if idle_seconds <= 0:
+            return None
+
+        def loop():
+            while not self._stopped.wait(interval):
+                try:
+                    self.reap_idle(idle_seconds)
+                except Exception:
+                    pass
+
+        thread = threading.Thread(target=loop, name="idle-reaper", daemon=True)
+        thread.start()
+        return thread
+
+    def reap_idle(self, idle_seconds, now=None):
+        current = time.time() if now is None else now
+        with self._guard:
+            visitors = list(self._visitors.values())
+        return sum(1 for visitor in visitors if visitor.reclaim_if_idle(current, idle_seconds))
 
     def health(self):
         with self._guard:
@@ -745,6 +788,7 @@ class ChatService:
         }
 
     def shutdown(self):
+        self._stopped.set()
         with self._guard:
             visitors = list(self._visitors.values())
             self._visitors.clear()
@@ -889,6 +933,7 @@ class Handler(BaseHTTPRequestHandler):
     password = ""                # 空表示不设口令
     secret = ""                  # 口令 cookie 的签名密钥
     server_version = "road-chat/0.4"
+    _visitor_error = None        # 最近一次创建访问者失败的原因（超限用）
     _attempts = {}               # ip -> [次数, 首次时间]
     _attempts_lock = threading.Lock()
 
@@ -970,7 +1015,11 @@ class Handler(BaseHTTPRequestHandler):
         visitor_id = self._cookie_id()
         if not visitor_id:
             return None, None
-        return visitor_id, self.service.visitor(visitor_id)
+        try:
+            return visitor_id, self.service.visitor(visitor_id)
+        except ChatError as error:
+            self._visitor_error = str(error)
+            return None, None
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
@@ -1015,16 +1064,19 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._json(401, {"error": "需要口令；刷新页面重进"})
             return
+        self._visitor_error = None
         if self.path == "/api/new":
             visitor_id, visitor = self._visitor()
             if visitor is None:
-                self._json(401, {"error": "会话标识缺失；刷新页面重开"})
+                self._json(503 if self._visitor_error else 401,
+                           {"error": self._visitor_error or "会话标识缺失；刷新页面重开"})
                 return
             self._json(200, {"sessionId": visitor.new_session()})
             return
         visitor_id, visitor = self._visitor()
         if visitor is None:
-            self._json(401, {"error": "会话标识缺失；刷新页面重开"})
+            self._json(503 if self._visitor_error else 401,
+                       {"error": self._visitor_error or "会话标识缺失；刷新页面重开"})
             return
         if self.path == "/api/stop":
             stopped = visitor.stop((payload.get("sessionId") or "").strip())
@@ -1106,6 +1158,8 @@ def main(argv=None):
     Handler.password = password
     Handler.secret = auth_secret(root) if password else ""
     service = ChatService(root, read_api_key(root))
+    idle_seconds = int(os.environ.get("ROAD_CHAT_IDLE_SECONDS", "1800") or 0)
+    service.start_reaper(idle_seconds)
     Handler.service = service
     server = ThreadingHTTPServer((host, args.port), Handler)
     server.daemon_threads = True
@@ -1115,6 +1169,8 @@ def main(argv=None):
     marker.write_text(url, encoding="utf-8")
     print(f"道路养护专家已启动：{url}（按访问者隔离运行时）", flush=True)
     print("口令：已启用（登录页输入）" if password else "口令：未启用（config.json 里 password 为空）", flush=True)
+    if idle_seconds > 0:
+        print(f"空闲回收：{idle_seconds // 60} 分钟（ROAD_CHAT_IDLE_SECONDS 可改，0 关闭）", flush=True)
     print("停止：Ctrl+C", flush=True)
     try:
         server.serve_forever()

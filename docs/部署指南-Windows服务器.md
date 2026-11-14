@@ -121,8 +121,9 @@ cd C:\road
 .\bootstrap-windows.ps1
 ```
 
-它会做：装 Git、Node 24、Python 3.12、PyMuPDF/Pillow；
-建 `roadchat` 账户（口令写在 `C:\road\etc\roadchat-password.txt`）；收紧 ACL；放行 Windows 防火墙 80/443/8443。
+它会做：校验 Node（服务器自备）、装 Git、Python 3.12、PyMuPDF/Pillow；
+建 `roadchat` 账户（口令写在 `C:\road\etc\roadchat-password.txt`）；收紧 ACL；放行 Windows 防火墙 80/443/8443；
+最后做两项系统检查——给 `C:\road\work`、仓库目录加 Defender 排除，检查页面文件是否 ≥ 4GB（不够会提示怎么设）。
 
 **做完应该看到**：
 
@@ -445,6 +446,13 @@ Restart-Computer -Force
 
 ## 13. 日常与回滚
 
+**空闲回收**：某个访问者连续 30 分钟没请求，脚本会停掉他的运行时（内存还给系统）；他下次说话会自动恢复
+原对话，只是第一条消息等 15–20 秒。想改时长就在 `roadchat.env` 里改 `ROAD_CHAT_IDLE_SECONDS`（秒，0 关闭），
+然后 `service.ps1 restart`。
+
+**并发上限**：最多 8 个访问者在用。第 9 个页面会直接提示「暂时已超过使用人数上限（8人），请稍后再试」，
+不会挤掉已在线的人；每天 04:00 重启后名额重置。
+
 **日常**：三个任务开机自启、失败每分钟重试，一般不用管。每周看一眼 `C:\road\work` 占用
 （会话数据会增长；不想要就停任务后删掉对应 visitor 目录）。
 
@@ -478,3 +486,11 @@ Restart-Computer -Force
 5. **RDP 3389 只在必要时开**，并限制来源 IP；脚本不会自动放开它。
 6. **控制台防火墙和 Windows 防火墙是两层**：脚本只管 Windows 那一层，控制台的规则要你手动加。
 7. **`deploy.json` 不在 git 里**：clone 完必须单独补，否则 `install-chat.ps1` 会报缺 key。
+8. **页面文件建议 4–8GB**。内存吃紧时它让系统变慢而不是杀进程。设完要重启：
+   ```powershell
+   $cs = Get-CimInstance Win32_ComputerSystem
+   if ($cs.AutomaticManagedPagefile) {
+       Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $false }
+       New-CimInstance -ClassName Win32_PageFileSetting -Property @{ Name = 'C:\pagefile.sys'; InitialSize = 4096; MaximumSize = 8192 }
+   }
+   ```
