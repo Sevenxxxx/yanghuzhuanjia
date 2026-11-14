@@ -154,6 +154,13 @@ cd C:\road\app\scripts\p3\server
 它从 `deploy.json` 读 `api_key`、`password`、`domain`、端口与路径，然后：
 写 `C:\road\etc\` 四个配置 → 生成两个启动脚本 → 注册三个计划任务 → 下载 Caddy → 校验 Caddyfile → 启动。
 
+> **Caddy 是什么**：一个用 Go 写的 Web 服务器兼反向代理，和 nginx 干同一件事，但单文件、
+> 自带 HTTPS（自动申请与续期证书）。选它是因为 Windows 上 nginx + certbot 那套很别扭：
+> certbot 没有官方 Windows 支持，而 Caddy 把 ACME 内置了。它在这里只做三件事：
+> ① 对外的加密入口（8443/443）；② 把请求转给只听回环的聊天服务（8095）；
+> ③ 流式回答不缓冲（配置里的 `flush_interval -1`）。
+> 安装位置 `C:\road\caddy\caddy.exe`，配置 `C:\road\caddy\Caddyfile`，由计划任务 `RoadCaddy` 守着。
+
 **做完应该看到**：
 
 ```
@@ -218,6 +225,7 @@ Caddy 会自动完成 ACME 签发，之后同事用 `https://road.example.com/`�
 | 规范检索失败 | `C:\road\specs\guifanchaxun\tools\guifan-chaxun\config.json` | 第 6 步的两个路径没改 |
 | 提示 `dsh` 需要更高 Node | `node -v` | 必须 ≥ 24.9；重跑 bootstrap |
 | 8443 证书告警 | 正常 | 自签证书；上域名后消失 |
+| 8443 打不开但任务显示 Running | `C:\road\caddy\caddy.exe validate --config C:\road\caddy\Caddyfile` | 端口被占、Caddyfile 写坏；也可以在控制台手动 `caddy run` 看报错 |
 
 看日志：
 
