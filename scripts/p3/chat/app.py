@@ -31,7 +31,7 @@ sys.path.insert(0, str(P3))
 from local_web import local_addresses, pick_lan_address  # noqa: E402
 
 PROFILE = "road-sdk"
-VERSION = "0.4.3"
+VERSION = "0.4.4"
 DEFAULT_PORT = 8091
 DEFAULT_ROOT = Path.home() / "dsh-roads"
 # 同一访问者累计开这么多新对话且空闲时，重建运行时，避免会话无限堆积。

@@ -3,6 +3,14 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.4（2026-11-14）
+
+- 部署前优化：`install-chat.ps1` 拒绝占位 api_key（含「替换/你的/your」等字样），避免拿假 key 上线；
+  `service.ps1 status` 显示在线名额 `online/8`。
+- 部署指南：第 4 步补「包名别写成 dsh」的提醒与锁版本写法；第 8 步解释 `online` 与 `visitors` 的区别；
+  新增附录 B——管理员 `dsh web` 自查入口与两把 key 的分工。
+- `deploy.example.json` 的说明区分产品 key 与管理 key。
+
 ## 0.4.3（2026-11-14）
 
 - 聊天页标题栏右侧新增「新对话」按钮：停掉正在进行的回答、清空当前对话、向服务要一个新会话，

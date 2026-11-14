@@ -69,6 +69,9 @@ $UseHttps = $Https.IsPresent
 if ($HttpPort -le 0) { $HttpPort = 8443 }
 if (-not $ApiKey) { throw '没有 API key：在 deploy.json 里填 api_key，或用 -ApiKey 传入' }
 if ($ApiKey -notmatch '^sk-') { throw "api_key 看起来不像真的（当前：$($ApiKey.Substring(0, [Math]::Min(6, $ApiKey.Length)))…）" }
+if ($ApiKey -match '替换|你的|your|xxx|placeholder') {
+    throw 'deploy.json 的 api_key 还是占位值，请填真实 key（DeepSeek 控制台 → API keys）'
+}
 
 foreach ($path in @("$AppDir\scripts\p3\chat\app.py", "$AppDir\scripts\p3\proxy\model_proxy.py")) {
     if (-not (Test-Path $path)) { throw "缺少 $path；先把仓库放到 $AppDir" }

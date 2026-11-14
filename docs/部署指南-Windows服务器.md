@@ -108,12 +108,15 @@ New-NetFirewallRule -DisplayName 'RoadChat SSH 22' -Direction Inbound -Protocol 
 
 先跑初始化：Git、Node、Python 都由它装（顺序反了会卡在「没有 git」）。
 
-在服务器上以**管理员身份**打开 PowerShell，然后把这一个脚本从本机传上去：
+在服务器上以**管理员身份**打开 PowerShell，然后从本机传**两个文件**上去：
 
 ```
-本机  scripts\p3\server\bootstrap-windows.ps1
-  →   服务器  C:\road\bootstrap-windows.ps1
+本机  scripts\p3\server\bootstrap-windows.ps1   →  C:\road\bootstrap-windows.ps1
+本机  deploy.json（仓库根）                      →  C:\road\deploy.json
 ```
+
+`deploy.json` 必须一起传：初始化要按里面的 `paths` 建桌面目录。脚本会先找自己同目录的
+`deploy.json`，找不到再找仓库根的那份。
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
@@ -147,6 +150,9 @@ npm install -g @deepseek-ai/dsh
 dsh --version                      # 打印版本号即成功
 Get-Command dsh | Select Source    # 默认在 C:\Users\<你>\AppData\Roaming\npm\dsh.cmd
 ```
+
+> **包名别写错**：npm 上叫 `dsh` 的是另一个项目（"A shell written in JavaScript"），
+> 我们的包是 **`@deepseek-ai/dsh`**。想锁版本就 `npm install -g @deepseek-ai/dsh@0.2.2-rc.1`。
 
 - 必须 **Node ≥ 24.9**（第 3 步已装好）；
 - 装完当前窗口就能用；新开的窗口因为系统 PATH 已包含该目录，也能找到；
@@ -187,9 +193,16 @@ Test-Path "$env:USERPROFILE\Desktop\yanghuzhuanjia\scripts\p3\chat\app.py"    # 
 > 如果哪天仓库改回私有，用 fine-grained PAT（只勾这个仓库、权限只给 `Contents: Read`）：
 > `git clone https://<你的PAT>@github.com/Sevenxxxx/yanghuzhuanjia.git "$env:USERPROFILE\Desktop\yanghuzhuanjia"`
 
-`deploy.json` **不在仓库里**（被 gitignore），clone 完必须补上。两种方式：
+`deploy.json` **不在仓库里**（被 gitignore），clone 完必须补上。第 3 步已经把它放在
+`C:\road\deploy.json`，直接复制过去最省事：
 
-- **A**：用远程桌面磁盘映射，把本机的 `deploy.json` 拖到 `桌面\yanghuzhuanjia\deploy.json`（或直接复制文件内容，在服务器里新建）；
+```powershell
+Copy-Item C:\road\deploy.json "$env:USERPROFILE\Desktop\yanghuzhuanjia\deploy.json"
+```
+
+没有那份的话，用下面任一方式补：
+
+- **A**：用远程桌面磁盘映射，把本机的 `deploy.json` 拖到 `桌面\yanghuzhuanjia\deploy.json`；
 - **B**：服务器上直接写，把 `api_key` 换成真实值（注意 PowerShell 里反斜杠要写两个）：
 
 ```powershell
@@ -296,7 +309,8 @@ Invoke-RestMethod http://127.0.0.1:8095/api/health
 Get-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy | Select TaskName,State
 ```
 
-**期望**：health 返回 `ok: True`；三个任务都是 `Running`。
+**期望**：health 返回 `ok: True`；三个任务都是 `Running`。`online` 是当前占用的在线名额
+（上限 8），`visitors` 是见过的浏览器数，两者不必相等。
 
 ---
 
@@ -495,3 +509,35 @@ Restart-Computer -Force
        New-CimInstance -ClassName Win32_PageFileSetting -Property @{ Name = 'C:\pagefile.sys'; InitialSize = 4096; MaximumSize = 8192 }
    }
    ```
+
+---
+
+## 附录 B：管理员自查入口（dsh 自带 Web）
+
+这是**给你自己**检查服务器、管理文件用的，不是同事入口。同事继续用 `http://域名:8443/`。
+
+1. RDP 进服务器，管理员 PowerShell；
+2. 用自己的**管理 key**（和产品 key 分开，见下表）设进环境变量：
+
+```powershell
+$env:DEEPSEEK_API_KEY = 'sk-你的管理key'
+dsh web --host 127.0.0.1 --port 3080
+```
+
+3. 它会打印一个带 token 的地址，在**服务器上的 Edge** 里打开 `http://127.0.0.1:3080/?token=...`；
+4. 用完 `Ctrl+C` 关掉。
+
+**三条规矩**
+
+- 只绑 `127.0.0.1`。那个 token 地址等价于服务器的管理员 shell，**不要外发、不要截图**；
+- 不要在界面里改 `C:\road\work`（同事的咨询数据）；
+- 想从笔记本直接用：装 Tailscale，把 `--host` 换成 Tailscale 的 IP，走加密内网。
+
+**两把 key 的分工**
+
+| 用途 | key 放哪 | 谁读 |
+|---|---|---|
+| 产品（同事用） | `C:\road\etc\proxy.env`（ACL 仅管理员/SYSTEM） | `RoadModelProxy` |
+| 你的 `dsh web` | `C:\Users\Administrator\.dsh\.credentials.yaml` 的 `refs.DEEPSEEK_API_KEY`，或用户环境变量 | 你自己启动的 dsh |
+
+两把互不影响：轮换产品 key 只需改 `proxy.env` 并重启 `RoadModelProxy`；换管理 key 改凭据文件即可。

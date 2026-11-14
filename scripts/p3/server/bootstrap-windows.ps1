@@ -39,8 +39,12 @@ function Grant-Traverse([string]$target, [string]$user) {
 }
 
 
-$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
-$ConfigPath = Join-Path $RepoRoot 'deploy.json'
+# 单独把脚本传到服务器时，deploy.json 放在它旁边；在仓库里跑则用仓库根那份
+$ConfigPath = Join-Path $PSScriptRoot 'deploy.json'
+if (-not (Test-Path $ConfigPath)) {
+    $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
+    $ConfigPath = Join-Path $RepoRoot 'deploy.json'
+}
 if (Test-Path $ConfigPath) {
     $Deploy = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
     Write-Host "使用配置：$ConfigPath" -ForegroundColor DarkGray
