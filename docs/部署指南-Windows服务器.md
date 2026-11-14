@@ -13,11 +13,10 @@
 | 项目 | 说明 |
 |---|---|
 | 服务器公网 IP | 腾讯云控制台首页能看到 |
-| GitHub PAT | fine-grained，只给本仓库 `Contents: Read`（clone 私有仓库用） |
 | 管理员密码 | 买的时候设置的；忘了就在控制台重置 |
 | `deploy.json` | 本机仓库根目录，**`api_key` 已填真实值**（`password` 默认 `yhg`） |
 | 规范库 | 本机的 `guifanchaxun` 目录，含 `guifansrc`（3.79GB）与 `library_data`（0.42GB） |
-| 上传通道 | git clone（仓库与规范工具，走 PAT）；WinSCP 只用于 `deploy.json` 与两个数据目录 |
+| 上传通道 | git clone（仓库已公开，不需要凭证）；WinSCP 只用于 `deploy.json` 与两个数据目录 |
 
 先确认本机这两项：
 
@@ -163,14 +162,16 @@ Get-Command dsh | Select Source    # C:\road\node-global\dsh.cmd
 
 ## 4. git clone 拉仓库（约 1 分钟）
 
-仓库是私有的，需要一个**只读**凭证。推荐 fine-grained PAT（GitHub → Settings → Developer settings →
-Fine-grained tokens → 只勾这个仓库、权限只给 `Contents: Read`）。
+仓库现在是**公开**的，直接 clone，不需要任何凭证：
 
 ```powershell
-git clone https://<你的PAT>@github.com/Sevenxxxx/yanghuzhuanjia.git C:\road\app
+git clone https://github.com/Sevenxxxx/yanghuzhuanjia.git C:\road\app
 
 Test-Path C:\road\app\scripts\p3\chat\app.py    # True
 ```
+
+> 如果哪天仓库改回私有，用 fine-grained PAT（只勾这个仓库、权限只给 `Contents: Read`）：
+> `git clone https://<你的PAT>@github.com/Sevenxxxx/yanghuzhuanjia.git C:\road\app`
 
 `deploy.json` **不在仓库里**（被 gitignore），clone 完必须补上。两种方式：
 
