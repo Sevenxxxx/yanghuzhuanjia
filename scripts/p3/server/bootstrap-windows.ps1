@@ -49,7 +49,14 @@ foreach ($dir in @($AppDir, $SpecDir, $WorkDir, $EtcDir, $NodeGlobal, 'C:\road\b
 }
 
 Step 'Node 24（dsh 要求 >= 24.9，Node 20 已停止维护）'
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+$needNode = $true
+if (Get-Command node -ErrorAction SilentlyContinue) {
+    try {
+        $current = [version]((node --version).TrimStart('v'))
+        if ($current -ge [version]'24.9.0') { $needNode = $false }
+    } catch { $needNode = $true }
+}
+if ($needNode) {
     $index = Invoke-RestMethod 'https://nodejs.org/dist/index.json' -TimeoutSec 30
     $lts = $index | Where-Object { $_.version -match '^v24\.' -and $_.lts } | Select-Object -First 1
     $msi = Join-Path $env:TEMP "node-$($lts.version)-x64.msi"
@@ -61,7 +68,14 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 Write-Host "node $(node --version)"
 
 Step 'Python 3.12'
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+$needPython = $true
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    try {
+        $pyVersion = (& python -c "import sys;print('%d.%d' % sys.version_info[:2])" 2>$null | Select-Object -First 1)
+        if ($LASTEXITCODE -eq 0 -and $pyVersion -match '^3\.(12|1[3-9])$') { $needPython = $false }
+    } catch { $needPython = $true }
+}
+if ($needPython) {
     $html = (Invoke-WebRequest 'https://www.python.org/ftp/python/' -UseBasicParsing -TimeoutSec 30).Content
     $versions = [regex]::Matches($html, 'href="(3\.12\.\d+)/"') | ForEach-Object { [version]$_.Groups[1].Value }
     $latest = ($versions | Sort-Object -Descending | Select-Object -First 1).ToString()
