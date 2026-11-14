@@ -1,5 +1,5 @@
 {
-  "_说明": "复制成 deploy.json 再填。deploy.json 已在 .gitignore 里，不会提交，也不会出现在任何推送。password 留空表示打开页面不要口令；api_key 只写真实 key，服务器上它只会被写进 proxy.env（ACL 仅管理员可读）。https=false 表示纯 HTTP（口令与内容在链路上是明文），端口用 http_port；改成 true 后 Caddy 自动申请证书并跳 HTTPS。domain 填你的域名后，HTTP 模式直接 http://域名:端口 访问；HTTPS 模式则用 https://域名/。",
+  "_说明": "复制成 deploy.json 再填。deploy.json 已在 .gitignore 里，不会提交，也不会出现在任何推送。password 留空表示打开页面不要口令；api_key 只写真实 key，服务器上它只会被写进 proxy.env（ACL 仅管理员可读）。https=false 表示纯 HTTP（口令与内容在链路上是明文），端口用 http_port；改成 true 后 Caddy 自动申请证书并跳 HTTPS。domain 填你的域名后，HTTP 模式直接 http://域名:端口 访问；HTTPS 模式则用 https://域名/。paths 里的 %USERPROFILE% 会被脚本展开成当前用户的目录；app 与 specs 可以放在桌面，work/etc 建议留在 C:\\road。",
   "password": "yhg",
   "api_key": "sk-替换成你的 key",
   "domain": "",
@@ -7,8 +7,8 @@
   "http_port": 8443,
   "service_user": "roadchat",
   "paths": {
-    "app": "C:\\road\\app",
-    "specs": "C:\\road\\specs",
+    "app": "%USERPROFILE%\\Desktop\\yanghuzhuanjia",
+    "specs": "%USERPROFILE%\\Desktop\\guifanchaxun",
     "work": "C:\\road\\work",
     "etc": "C:\\road\\etc"
   }

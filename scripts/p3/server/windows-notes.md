@@ -36,8 +36,8 @@ cd C:\road\server
 .\bootstrap-windows.ps1
 
 # 2. 放仓库与规范库
-#    C:\road\app                ← 本项目（含 .agents/skills 与 data/）
-#    C:\road\specs\guifanchaxun ← 工具 + guifansrc + library_data
+#    %USERPROFILE%\Desktop\yanghuzhuanjia  ← 本项目（含 .agents/skills 与 data/）
+#    %USERPROFILE%\Desktop\guifanchaxun    ← 工具 + guifansrc + library_data
 
 # 3. 配置 + 服务
 .\install-chat.ps1   # key、端口、域名、路径全部来自 deploy.json
@@ -53,8 +53,8 @@ cd C:\road\server
 
 | 路径 | 说明 |
 |---|---|
-| `C:\road\app` | 项目仓库，`roadchat` 只读 |
-| `C:\road\specs\guifanchaxun` | 规范库，只读 |
+| `%USERPROFILE%\Desktop\yanghuzhuanjia` | 项目仓库，`roadchat` 只读（脚本自动给桌面的穿越权限） |
+| `%USERPROFILE%\Desktop\guifanchaxun` | 规范工具与库，只读；其他应用也可直接用它 |
 | `C:\road\work` | 运行时数据（会话、咨询记录），`roadchat` 可写 |
 | `C:\road\etc` | `config.json`、`roadchat.env`、`proxy.env`、`proxy.patch.yml` |
 | `C:\road\bin` | `run-chat.ps1`、`run-proxy.ps1`（计划任务调它们） |

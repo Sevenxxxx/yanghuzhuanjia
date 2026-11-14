@@ -18,6 +18,27 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Step([string]$text) { Write-Host "`n== $text ==" -ForegroundColor Cyan }
+function Expand-DeployPath([string]$value) {
+    if (-not $value) { return $value }
+    return [Environment]::ExpandEnvironmentVariables($value).TrimEnd('\')
+}
+
+function Grant-Traverse([string]$target, [string]$user) {
+    # 目标在某个用户目录下时，给「穿越」权限（不给列目录），否则服务账户进不去
+    $profileRoot = [Environment]::GetFolderPath('UserProfile')
+    if (-not $target.StartsWith($profileRoot, [StringComparison]::OrdinalIgnoreCase)) { return }
+    $current = $profileRoot
+    icacls $profileRoot /grant "${user}:(X)" | Out-Null
+    $relative = $target.Substring($profileRoot.Length).TrimStart('\')
+    $parts = $relative.Split('\')
+    for ($i = 0; $i -lt $parts.Count - 1; $i++) {
+        $current = Join-Path $current $parts[$i]
+        if (Test-Path $current) { icacls $current /grant "${user}:(X)" | Out-Null }
+    }
+}
+
+
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
 $ConfigPath = Join-Path $RepoRoot 'deploy.json'
 if (Test-Path $ConfigPath) {
@@ -28,14 +49,15 @@ if (Test-Path $ConfigPath) {
 }
 
 if ($Deploy) {
-    if ($Deploy.paths.app) { $AppDir = $Deploy.paths.app }
-    if ($Deploy.paths.specs) { $SpecDir = $Deploy.paths.specs }
-    if ($Deploy.paths.work) { $WorkDir = $Deploy.paths.work }
-    if ($Deploy.paths.etc) { $EtcDir = $Deploy.paths.etc }
+    if ($Deploy.paths.app) { $AppDir = Expand-DeployPath $Deploy.paths.app }
+    if ($Deploy.paths.specs) { $SpecDir = Expand-DeployPath $Deploy.paths.specs }
+    if ($Deploy.paths.work) { $WorkDir = Expand-DeployPath $Deploy.paths.work }
+    if ($Deploy.paths.etc) { $EtcDir = Expand-DeployPath $Deploy.paths.etc }
     if ($Deploy.service_user) { $ServiceUser = $Deploy.service_user }
 }
+Write-Host "仓库：$AppDir"
+Write-Host "规范库：$SpecDir"
 
-function Step([string]$text) { Write-Host "`n== $text ==" -ForegroundColor Cyan }
 function Refresh-Path {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
     $user = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -119,6 +141,7 @@ Step 'ACL：工作目录可写，程序与规范库只读'
 icacls $WorkDir /grant "${ServiceUser}:(OI)(CI)M" | Out-Null
 foreach ($readonlyDir in @($AppDir, $SpecDir)) {
     icacls $readonlyDir /grant "${ServiceUser}:(OI)(CI)RX" | Out-Null
+    Grant-Traverse $readonlyDir $ServiceUser
 }
 
 Step '防火墙'

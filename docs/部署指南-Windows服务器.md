@@ -135,15 +135,23 @@ Get-Command dsh | Select Source    # 默认在 C:\Users\<你>\AppData\Roaming\np
 
 ---
 
+
+> **路径说明**：`deploy.json` 里的 `%USERPROFILE%` 会被脚本展开成当前用户目录，
+> 所以两台机器可以用同一份配置。仓库与规范库放桌面时，脚本会自动给 `roadchat`
+> 对上级目录的「穿越」权限（只穿越、不列目录），否则服务账户进不去桌面。
+> 如果这台机器的桌面被重定向到别处，把 `paths` 直接写成实际绝对路径即可。
+
 ## 5. git clone 拉仓库（约 1 分钟）
 
 仓库现在是**公开**的，直接 clone，不需要任何凭证：
 
 ```powershell
-git clone https://github.com/Sevenxxxx/yanghuzhuanjia.git C:\road\app
+git clone https://github.com/Sevenxxxx/yanghuzhuanjia.git "$env:USERPROFILE\Desktop\yanghuzhuanjia"
 
-Test-Path C:\road\app\scripts\p3\chat\app.py    # True
+Test-Path "$env:USERPROFILE\Desktop\yanghuzhuanjia\scripts\p3\chat\app.py"    # True
 ```
+
+> 仓库放在桌面；运行时数据（会话、咨询记录）仍在 `C:\road\work`，两者分开。
 
 > 如果哪天仓库改回私有，用 fine-grained PAT（只勾这个仓库、权限只给 `Contents: Read`）：
 > `git clone https://<你的PAT>@github.com/Sevenxxxx/yanghuzhuanjia.git C:\road\app`
@@ -168,8 +176,8 @@ notepad C:\road\app\deploy.json
   "http_port": 8443,
   "service_user": "roadchat",
   "paths": {
-    "app": "C:\\road\\app",
-    "specs": "C:\\road\\specs",
+    "app": "%USERPROFILE%\\Desktop\\yanghuzhuanjia",
+    "specs": "%USERPROFILE%\\Desktop\\guifanchaxun",
     "work": "C:\\road\\work",
     "etc": "C:\\road\\etc",
     "node_global": "C:\\road\\node-global"
@@ -178,7 +186,7 @@ notepad C:\road\app\deploy.json
 ```
 
 ```powershell
-Test-Path C:\road\app\deploy.json    # True
+Test-Path "$env:USERPROFILE\Desktop\yanghuzhuanjia\deploy.json"    # True
 ```
 
 ---
@@ -188,15 +196,15 @@ Test-Path C:\road\app\deploy.json    # True
 规范工具也有远程仓库，先 clone：
 
 ```powershell
-git clone https://github.com/Sevenxxxx/guifanchaxun.git C:\road\specs\guifanchaxun
+git clone https://github.com/Sevenxxxx/guifanchaxun.git "$env:USERPROFILE\Desktop\guifanchaxun"
 ```
 
 但 `guifansrc\`（3.79GB）和 `library_data\`（0.42GB）**都不在 git 里**（被 gitignore），
 必须另外用 WinSCP 传：
 
 ```
-本机 guifanchaxun\guifansrc      →  C:\road\specs\guifanchaxun\guifansrc
-本机 guifanchaxun\library_data  →  C:\road\specs\guifanchaxun\library_data
+本机 guifanchaxun\guifansrc      →  %USERPROFILE%\Desktop\guifanchaxun\guifansrc
+本机 guifanchaxun\library_data  →  %USERPROFILE%\Desktop\guifanchaxun\library_data
 ```
 
 **建议**：这一步和第 7、8 步并行——传大文件不占终端，另开窗口继续往下做。
@@ -207,16 +215,19 @@ git clone https://github.com/Sevenxxxx/guifanchaxun.git C:\road\specs\guifanchax
 
 ## 7. 改规范库自己的配置（1 分钟，**必做**）
 
-打开 `C:\road\specs\guifanchaxun\tools\guifan-chaxun\config.json`，把两个路径改成服务器上的：
+打开 `%USERPROFILE%\Desktop\guifanchaxun\tools\guifan-chaxun\config.json`，把两个路径改成服务器上的：
 
 ```json
 {
-  "library_dir": "C:\\road\\specs\\guifanchaxun\\guifansrc",
-  "data_dir": "C:\\road\\specs\\guifanchaxun\\library_data"
+  "library_dir": "C:\\Users\\<你的用户名>\\Desktop\\guifanchaxun\\guifansrc",
+  "data_dir": "C:\\Users\\<你的用户名>\\Desktop\\guifanchaxun\\library_data"
 }
 ```
 
 其它字段（`tesseract_cmd` 等）保持原样——我们不走 OCR，路径不存在也不影响。
+
+> 这里必须写**真实绝对路径**（`C:\Users\Administrator\Desktop\...`），这个工具不展开 `%USERPROFILE%`；
+> 我们自己的 `deploy.json` 则可以写 `%USERPROFILE%`，由脚本展开。
 
 **做完应该看到**：文件里两处盘符变成 `C:\\road\\specs\\...`。
 
@@ -301,7 +312,7 @@ Caddy 会自动完成 ACME 签发，之后同事改用 `https://你的域名/`�
 | 回答是「模型没有返回内容」 | `Get-ScheduledTask -TaskName RoadModelProxy` | 代理没起，或 `proxy.env` 的 key 不对 |
 | `bootstrap` 报找不到 node | 重开 PowerShell | 新装的 PATH 只对新进程生效 |
 | 脚本一打开就报语法错、中文乱码 | 文件是否 BOM | 用记事本另存为「UTF-8 带 BOM」，否则 5.1 按 GBK 解码 |
-| 规范检索失败 | `C:\road\specs\guifanchaxun\tools\guifan-chaxun\config.json` | 第 7 步的两个路径没改 |
+| 规范检索失败 | `%USERPROFILE%\Desktop\guifanchaxun\tools\guifan-chaxun\config.json` | 第 7 步的两个路径没改 |
 | 提示 `dsh` 需要更高 Node | `node -v` | 必须 ≥ 24.9；重跑 bootstrap |
 | 8443 证书告警 | 正常 | 自签证书；上域名后消失 |
 | 8443 打不开但任务显示 Running | `C:\road\caddy\caddy.exe validate --config C:\road\caddy\Caddyfile` | 端口被占、Caddyfile 写坏；也可以在控制台手动 `caddy run` 看报错 |

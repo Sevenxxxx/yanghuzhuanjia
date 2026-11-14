@@ -31,12 +31,31 @@ if (Test-Path $ConfigPath) {
 }
 
 function Step([string]$text) { Write-Host "`n== $text ==" -ForegroundColor Cyan }
+function Expand-DeployPath([string]$value) {
+    if (-not $value) { return $value }
+    return [Environment]::ExpandEnvironmentVariables($value).TrimEnd('\')
+}
+
+function Grant-Traverse([string]$target, [string]$user) {
+    # 目标在某个用户目录下时，给「穿越」权限（不给列目录），否则服务账户进不去
+    $profileRoot = [Environment]::GetFolderPath('UserProfile')
+    if (-not $target.StartsWith($profileRoot, [StringComparison]::OrdinalIgnoreCase)) { return }
+    $current = $profileRoot
+    icacls $profileRoot /grant "${user}:(X)" | Out-Null
+    $relative = $target.Substring($profileRoot.Length).TrimStart('\')
+    $parts = $relative.Split('\')
+    for ($i = 0; $i -lt $parts.Count - 1; $i++) {
+        $current = Join-Path $current $parts[$i]
+        if (Test-Path $current) { icacls $current /grant "${user}:(X)" | Out-Null }
+    }
+}
+
 
 if ($Deploy) {
-    if ($Deploy.paths.app) { $AppDir = $Deploy.paths.app }
-    if ($Deploy.paths.work) { $WorkDir = $Deploy.paths.work }
-    if ($Deploy.paths.etc) { $EtcDir = $Deploy.paths.etc }
-    if ($Deploy.paths.specs) { $SpecDir = $Deploy.paths.specs }
+    if ($Deploy.paths.app) { $AppDir = Expand-DeployPath $Deploy.paths.app }
+    if ($Deploy.paths.work) { $WorkDir = Expand-DeployPath $Deploy.paths.work }
+    if ($Deploy.paths.etc) { $EtcDir = Expand-DeployPath $Deploy.paths.etc }
+    if ($Deploy.paths.specs) { $SpecDir = Expand-DeployPath $Deploy.paths.specs }
     if ($Deploy.service_user) { $ServiceUser = $Deploy.service_user }
     if ($Deploy.domain) { $Domain = $Deploy.domain }
     if ($null -ne $Deploy.https) { $Https = [bool]$Deploy.https }
@@ -85,7 +104,7 @@ $servicePassword = (Get-Content (Join-Path $EtcDir "$ServiceUser-password.txt") 
 
 Step '配置文件'
 $config = @{
-    spec_skill           = "$SpecDir\guifanchaxun\tools\guifan-chaxun"
+    spec_skill           = "$SpecDir\tools\guifan-chaxun"
     tool_timeout_seconds = 45
     privacy_default      = 'restricted'
 }
@@ -109,6 +128,13 @@ Set-Content -Path (Join-Path $EtcDir 'proxy.patch.yml') -Encoding utf8 -Value @(
 # 真实 key 只有管理员与 SYSTEM 能读；roadchat 读不到
 # 用 SID 而不是本地化组名，中文版 Windows 也不会失配
 icacls (Join-Path $EtcDir 'proxy.env') /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null
+
+Step '权限：服务账户可读仓库与规范库'
+foreach ($readonlyDir in @($AppDir, $SpecDir)) {
+    if (-not (Test-Path $readonlyDir)) { continue }
+    icacls $readonlyDir /grant "${ServiceUser}:(OI)(CI)RX" | Out-Null
+    Grant-Traverse $readonlyDir $ServiceUser
+}
 
 Step '启动脚本'
 Set-Content -Path 'C:\road\bin\run-chat.ps1' -Encoding utf8 -Value @"

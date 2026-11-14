@@ -13,6 +13,15 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+
+$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
+$ConfigPath = Join-Path $RepoRoot 'deploy.json'
+if (Test-Path $ConfigPath) {
+    $Deploy = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($Deploy.paths.app) { $AppDir = [Environment]::ExpandEnvironmentVariables($Deploy.paths.app) }
+    if ($Deploy.paths.work) { $WorkDir = [Environment]::ExpandEnvironmentVariables($Deploy.paths.work) }
+    if ($Deploy.paths.etc) { $EtcDir = [Environment]::ExpandEnvironmentVariables($Deploy.paths.etc) }
+}
 $script:pass = 0
 $script:fail = 0
 
