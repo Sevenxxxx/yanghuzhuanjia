@@ -3,6 +3,13 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.8（2026-11-15）
+
+- 修复 `RoadChat` 计划任务启动即退出：非管理员账户运行「不论是否登录」的计划任务需要
+  **批量登录权限**（`SeBatchLogonRight`），`install-chat.ps1` 现在会自动授予。
+- `run-chat.ps1` 现在把输出写到 `C:\road\work\logs\chat-run.log`；安装脚本启动后自检 40 秒，
+  没起来就打印任务结果码与日志尾部，不再「装完看起来成功但服务其实没起」。
+
 ## 0.4.7（2026-11-15）
 
 - 修复 `install-chat.ps1` 注册 `RoadChat` 计划任务时报 `AmbiguousParameterSet`：

@@ -155,11 +155,20 @@ foreach ($readonlyDir in @($AppDir, $SpecDir)) {
 Step '启动脚本'
 Set-Content -Path 'C:\road\bin\run-chat.ps1' -Encoding utf8 -Value @"
 `$ErrorActionPreference = 'Stop'
-Get-Content '$EtcDir\roadchat.env' | ForEach-Object {
-    if (`$_ -match '^\s*([^#=]+)=(.*)$') { [Environment]::SetEnvironmentVariable(`$matches[1].Trim(), `$matches[2].Trim(), 'Process') }
+`$logDir = Join-Path '$WorkDir' 'logs'
+New-Item -ItemType Directory -Force -Path `$logDir | Out-Null
+`$log = Join-Path `$logDir 'chat-run.log'
+"=== `$(Get-Date -Format o) start ===" | Out-File `$log -Append -Encoding utf8
+try {
+    Get-Content '$EtcDir\roadchat.env' | ForEach-Object {
+        if (`$_ -match '^\s*([^#=]+)=(.*)$') { [Environment]::SetEnvironmentVariable(`$matches[1].Trim(), `$matches[2].Trim(), 'Process') }
+    }
+    Set-Location '$AppDir'
+    & python -X utf8 '$AppDir\scripts\p3\chat\app.py' --host 127.0.0.1 --port $ChatPort --home '$WorkDir' *>> `$log
+} catch {
+    `$_ | Out-File `$log -Append -Encoding utf8
+    exit 1
 }
-Set-Location '$AppDir'
-& python -X utf8 '$AppDir\scripts\p3\chat\app.py' --host 127.0.0.1 --port $ChatPort --home '$WorkDir'
 "@
 Set-Content -Path 'C:\road\bin\run-proxy.ps1' -Encoding utf8 -Value @"
 `$ErrorActionPreference = 'Stop'
@@ -170,6 +179,26 @@ Get-Content '$EtcDir\proxy.env' | ForEach-Object {
 "@
 
 Step '计划任务'
+
+function Grant-BatchLogon([string]$account) {
+    # 计划任务「不论用户是否登录都运行」用的是批量登录权限，普通账户默认没有
+    $cfg = Join-Path $env:TEMP ("secpol-" + [guid]::NewGuid().ToString("N") + ".cfg")
+    $db = Join-Path $env:TEMP ("secpol-" + [guid]::NewGuid().ToString("N") + ".sdb")
+    secedit /export /cfg $cfg | Out-Null
+    $lines = Get-Content $cfg
+    $right = $lines | Where-Object { $_ -match '^SeBatchLogonRight' }
+    if ($right) {
+        if ($right -notmatch [regex]::Escape($account)) {
+            $lines = $lines -replace [regex]::Escape($right), ($right.TrimEnd() + ",$account")
+        }
+    } else {
+        $lines = @($lines) + "SeBatchLogonRight = $account"
+    }
+    Set-Content -Path $cfg -Value $lines -Encoding unicode
+    secedit /configure /db $db /cfg $cfg /areas USER_RIGHTS | Out-Null
+    Remove-Item $cfg, $db -Force -ErrorAction SilentlyContinue
+}
+
 function Register-LongRunning([string]$name, [string]$script, [string]$user, [string]$password) {
     if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) {
         Unregister-ScheduledTask -TaskName $name -Confirm:$false
@@ -191,6 +220,7 @@ function Register-LongRunning([string]$name, [string]$script, [string]$user, [st
     Start-ScheduledTask -TaskName $name
 }
 Register-LongRunning 'RoadModelProxy' 'C:\road\bin\run-proxy.ps1' '' ''
+Grant-BatchLogon "$env:COMPUTERNAME\$ServiceUser"
 Register-LongRunning 'RoadChat' 'C:\road\bin\run-chat.ps1' $ServiceUser $servicePassword
 
 Step 'Caddy 反向代理'
@@ -242,6 +272,31 @@ $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 Register-ScheduledTask -TaskName 'RoadCaddy' -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
 Start-ScheduledTask -TaskName 'RoadCaddy'
+
+Step '启动自检'
+$healthy = $false
+$deadline = (Get-Date).AddSeconds(40)
+do {
+    Start-Sleep -Seconds 2
+    try {
+        $state = Invoke-RestMethod "http://127.0.0.1:$ChatPort/api/health" -TimeoutSec 3
+        if ($state.ok) { $healthy = $true; break }
+    } catch { }
+} while ((Get-Date) -lt $deadline)
+
+if (-not $healthy) {
+    $info = Get-ScheduledTaskInfo -TaskName 'RoadChat' -ErrorAction SilentlyContinue
+    Write-Host "聊天服务 40 秒内没起来（LastTaskResult=$($info.LastTaskResult)）" -ForegroundColor Red
+    $runLog = Join-Path $WorkDir 'logs\chat-run.log'
+    if (Test-Path $runLog) {
+        Write-Host "--- $runLog ---" -ForegroundColor DarkYellow
+        Get-Content $runLog -Tail 20
+    } else {
+        Write-Host '没有运行日志：任务可能根本没启动，检查「上次运行结果」与 roadchat 的登录权限。' -ForegroundColor DarkYellow
+    }
+} else {
+    Write-Host '聊天服务已就绪。' -ForegroundColor Green
+}
 
 Write-Host @"
 
