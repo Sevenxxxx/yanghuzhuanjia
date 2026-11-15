@@ -37,16 +37,45 @@ function Expand-DeployPath([string]$value) {
 }
 
 function Grant-Traverse([string]$target, [string]$user) {
-    # 目标在某个用户目录下时，给「穿越」权限（不给列目录），否则服务账户进不去
+    # 目标在用户目录下时，逐级给读+执行（RX）；只给 X 时部分系统上仍会被拒
     $profileRoot = [Environment]::GetFolderPath('UserProfile')
     if (-not $target.StartsWith($profileRoot, [StringComparison]::OrdinalIgnoreCase)) { return }
+    $chain = @($profileRoot)
     $current = $profileRoot
-    icacls $profileRoot /grant "${user}:(X)" | Out-Null
     $relative = $target.Substring($profileRoot.Length).TrimStart('\')
     $parts = $relative.Split('\')
     for ($i = 0; $i -lt $parts.Count - 1; $i++) {
         $current = Join-Path $current $parts[$i]
-        if (Test-Path $current) { icacls $current /grant "${user}:(X)" | Out-Null }
+        if (Test-Path $current) { $chain += $current }
+    }
+    foreach ($dir in $chain) {
+        icacls $dir /grant "${user}:(RX)" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "给 $dir 授权失败（icacls 退出码 $LASTEXITCODE）" -ForegroundColor DarkYellow
+        }
+    }
+}
+
+function Test-AsServiceUser([string]$path, [string]$password) {
+    # 用服务账户真的试一次「能不能访问这个目录」
+    $out = Join-Path $WorkDir 'acl-check.txt'
+    Remove-Item $out -Force -ErrorAction SilentlyContinue
+    $cred = New-Object System.Management.Automation.PSCredential($ServiceUser, (ConvertTo-SecureString $password -AsPlainText -Force))
+    $script = "if (Test-Path '$path') { 'OK' } else { 'DENIED' } | Out-File -FilePath '$out' -Encoding utf8"
+    try {
+        Start-Process powershell -Credential $cred -ArgumentList '-NoProfile', '-WindowStyle', 'Hidden', '-Command', $script -Wait -ErrorAction Stop
+    } catch {
+        Write-Host "无法以 $ServiceUser 身份启动测试进程：$($_.Exception.Message)" -ForegroundColor DarkYellow
+        return
+    }
+    if (Test-Path $out) {
+        $result = (Get-Content $out -Raw).Trim()
+        if ($result -eq 'OK') {
+            Write-Host "服务账户可访问仓库：$path" -ForegroundColor Green
+        } else {
+            Write-Host "服务账户仍无法访问仓库：$path（检查桌面是否被重定向）" -ForegroundColor Red
+        }
+        Remove-Item $out -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -151,6 +180,8 @@ foreach ($readonlyDir in @($AppDir, $SpecDir)) {
     icacls $readonlyDir /grant "${ServiceUser}:(OI)(CI)RX" | Out-Null
     Grant-Traverse $readonlyDir $ServiceUser
 }
+Test-AsServiceUser $AppDir $servicePassword
+Test-AsServiceUser $SpecDir $servicePassword
 
 Step '启动脚本'
 Set-Content -Path 'C:\road\bin\run-chat.ps1' -Encoding utf8 -Value @"
@@ -158,7 +189,8 @@ Set-Content -Path 'C:\road\bin\run-chat.ps1' -Encoding utf8 -Value @"
 `$logDir = Join-Path '$WorkDir' 'logs'
 New-Item -ItemType Directory -Force -Path `$logDir | Out-Null
 `$log = Join-Path `$logDir 'chat-run.log'
-"=== `$(Get-Date -Format o) start ===" | Out-File `$log -Append -Encoding utf8
+"=== `$(Get-Date -Format o) start user=`$([Environment]::UserName) ===" | Out-File `$log -Append -Encoding utf8
+"Test-Path repo: `$(Test-Path '$AppDir') / spec: `$(Test-Path '$SpecDir')" | Out-File `$log -Append -Encoding utf8
 try {
     Get-Content '$EtcDir\roadchat.env' | ForEach-Object {
         if (`$_ -match '^\s*([^#=]+)=(.*)$') { [Environment]::SetEnvironmentVariable(`$matches[1].Trim(), `$matches[2].Trim(), 'Process') }

@@ -364,6 +364,7 @@ Caddy 会自动完成 ACME 签发，之后同事改用 `https://你的域名/`�
 | 现象 | 先看什么 | 常见原因 |
 |---|---|---|
 | 浏览器连不上 8443 | 控制台防火墙 | 控制台没放行 8443（Windows 防火墙脚本已放行） |
+| RoadChat 日志报 `Set-Location` 拒绝访问 | 安装时输出的「服务账户可访问仓库」是否为 OK | 桌面被重定向或 ACL 未生效；重跑 install-chat 看自检结果 |
 | 页面能开但登录后一直转圈 | `Get-ScheduledTaskInfo -TaskName RoadChat` | 任务没起来；看 `C:\road\logs` 与任务「上次运行结果」 |
 | 回答是「模型没有返回内容」 | `Get-ScheduledTask -TaskName RoadModelProxy` | 代理没起，或 `proxy.env` 的 key 不对 |
 | `bootstrap` 报找不到 node | 重开 PowerShell | 新装的 PATH 只对新进程生效 |
