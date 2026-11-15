@@ -136,6 +136,19 @@ class PasswordTests(unittest.TestCase):
             self.assertEqual(app.resolve_password(broken, None), app.DEFAULT_PASSWORD)
 
 
+    def test_deploy_file_wins_over_environment(self):
+        with tempfile.TemporaryDirectory() as folder:
+            deploy = Path(folder) / "deploy.json"
+            deploy.write_text('{"password": "deploy-pass"}', encoding="utf-8")
+            self.assertEqual(app.resolve_password(None, "from-env", deploy), "deploy-pass")
+
+    def test_empty_deploy_password_disables_the_gate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            deploy = Path(folder) / "deploy.json"
+            deploy.write_text('{"password": ""}', encoding="utf-8")
+            self.assertEqual(app.resolve_password(None, "from-env", deploy), "")
+
+
 class MaxVisitorsConfigTests(unittest.TestCase):
     def test_default_is_eight(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -160,6 +173,25 @@ class MaxVisitorsConfigTests(unittest.TestCase):
             path.write_text('{"max_visitors": "abc"}', encoding="utf-8")
             self.assertEqual(app.resolve_max_visitors(path, None), 8)
             self.assertEqual(app.resolve_max_visitors(path, "0"), 8)
+
+    def test_deploy_file_wins_over_env_and_config(self):
+        with tempfile.TemporaryDirectory() as folder:
+            deploy = Path(folder) / "deploy.json"
+            deploy.write_text('{"max_visitors": 1}', encoding="utf-8")
+            config = Path(folder) / "config.json"
+            config.write_text('{"max_visitors": 5}', encoding="utf-8")
+            self.assertEqual(app.resolve_max_visitors(config, "12", deploy), 1)
+
+    def test_invalid_deploy_value_falls_through_to_env(self):
+        with tempfile.TemporaryDirectory() as folder:
+            deploy = Path(folder) / "deploy.json"
+            deploy.write_text('{"max_visitors": 0}', encoding="utf-8")
+            self.assertEqual(app.resolve_max_visitors(None, "3", deploy), 3)
+
+    def test_missing_deploy_file_keeps_env_priority(self):
+        with tempfile.TemporaryDirectory() as folder:
+            missing = Path(folder) / "deploy.json"
+            self.assertEqual(app.resolve_max_visitors(None, "7", missing), 7)
 
     def test_service_uses_configured_limit_in_message(self):
         service = app.ChatService(Path("."), "sk-test", max_visitors=2)

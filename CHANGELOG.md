@@ -3,6 +3,15 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.15（2026-11-15）
+
+- 部署配置改为**启动时直接读 `deploy.json`**：`max_visitors` 与 `password` 以它为准，优先级高于
+  `roadchat.env` 里的同名环境变量。改完 `deploy.json` 只需重启（`service.ps1 restart` 或重启
+  `RoadChat` 任务）即生效，不必重跑安装脚本。
+- 修的是「设了 `max_visitors` 却不起作用」：以前这两个值只在安装时写进 `roadchat.env`，
+  只重启服务不会重读 `deploy.json`，看起来像参数无效。
+- 并发上限仍然只限制**同时在线、已拉起运行时**的访问者，不是登录名额；超出者在点新对话或发消息时被挡。
+
 ## 0.4.14（2026-11-15）
 
 - 重建阈值由 8 个新对话改为 **5 个**，更快回收会话堆积（代价：新对话后第一条消息等 15–20 秒的次数变多）。

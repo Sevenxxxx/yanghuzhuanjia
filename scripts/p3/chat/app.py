@@ -24,6 +24,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# 仓库根的 deploy.json：部署时改它、重启服务就生效，不必重跑安装脚本
+DEPLOY_CONFIG = HERE.parents[2] / "deploy.json" if len(HERE.parents) > 2 else None
 P3 = HERE.parent
 ROOT = P3.parent.parent
 sys.path.insert(0, str(P3))
@@ -856,23 +858,46 @@ class ChatService:
 
 
 
-def resolve_password(config_path, env_value):
-    """口令优先级：环境变量（空值也算）> config.json > 默认值；空字符串表示不设口令。"""
+def read_json_file(path):
+    """读 JSON；文件缺失或格式坏了都返回 None（调用方各自决定回落值）。"""
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+
+
+def deploy_value(key, deploy_path=None):
+    """仓库根 deploy.json 里的值；没传路径、没有这个文件或没写这个键时返回 None。"""
+    if not deploy_path:
+        return None
+    path = Path(deploy_path)
+    if not path.is_file():
+        return None
+    data = read_json_file(path)
+    if not isinstance(data, dict):
+        return None
+    return data.get(key)
+
+
+def resolve_password(config_path, env_value, deploy_path=None):
+    """口令优先级：deploy.json > 环境变量（空值也算）> config.json > 默认值；空字符串表示不设口令。"""
+    deployed = deploy_value("password", deploy_path)
+    if deployed is not None:
+        return str(deployed or "").strip()
     if env_value is not None:
         return env_value.strip()
     path = Path(config_path)
     if path.is_file():
-        try:
+        data = read_json_file(path)
+        if data is None:
             # utf-8-sig：用记事本另存为 UTF-8 会带 BOM，不能因此回落成默认口令
-            data = json.loads(path.read_text(encoding="utf-8-sig"))
-        except (OSError, ValueError):
             return DEFAULT_PASSWORD
         return str(data.get("password", DEFAULT_PASSWORD) or "").strip()
     return DEFAULT_PASSWORD
 
 
-def resolve_max_visitors(config_path, env_value):
-    """并发上限优先级：环境变量 > config.json 的 max_visitors > 默认 8。"""
+def resolve_max_visitors(config_path, env_value, deploy_path=None):
+    """并发上限优先级：deploy.json 的 max_visitors > 环境变量 > config.json > 默认 8。"""
     def as_limit(value):
         try:
             number = int(value)
@@ -880,15 +905,17 @@ def resolve_max_visitors(config_path, env_value):
             return None
         return number if number > 0 else None
 
+    limit = as_limit(deploy_value("max_visitors", deploy_path))
+    if limit is not None:
+        return limit
     if env_value not in (None, ""):
         limit = as_limit(env_value)
         if limit is not None:
             return limit
     path = Path(config_path)
     if path.is_file():
-        try:
-            data = json.loads(path.read_text(encoding="utf-8-sig"))
-        except (OSError, ValueError):
+        data = read_json_file(path)
+        if data is None:
             return DEFAULT_MAX_VISITORS
         limit = as_limit(data.get("max_visitors"))
         if limit is not None:
@@ -1237,8 +1264,8 @@ def main(argv=None):
     root = Path(args.home)
     root.mkdir(parents=True, exist_ok=True)
     config_path = Path(args.config) if args.config else HERE / "config.json"
-    password = resolve_password(config_path, os.environ.get("ROAD_CHAT_PASSWORD"))
-    max_visitors = resolve_max_visitors(config_path, os.environ.get("ROAD_CHAT_MAX_VISITORS"))
+    password = resolve_password(config_path, os.environ.get("ROAD_CHAT_PASSWORD"), DEPLOY_CONFIG)
+    max_visitors = resolve_max_visitors(config_path, os.environ.get("ROAD_CHAT_MAX_VISITORS"), DEPLOY_CONFIG)
     Handler.password = password
     Handler.secret = auth_secret(root) if password else ""
     service = ChatService(root, read_api_key(root), max_visitors=max_visitors)
@@ -1253,7 +1280,7 @@ def main(argv=None):
     marker.write_text(url, encoding="utf-8")
     print(f"道路养护专家已启动：{url}（按访问者隔离运行时）", flush=True)
     print("口令：已启用（登录页输入）" if password else "口令：未启用（config.json 里 password 为空）", flush=True)
-    print(f"并发上限：{max_visitors} 人（deploy.json 的 max_visitors 或 ROAD_CHAT_MAX_VISITORS）", flush=True)
+    print(f"并发上限：{max_visitors} 人（deploy.json 的 max_visitors；改完重启服务即生效）", flush=True)
     if idle_seconds > 0:
         print(f"空闲回收：{idle_seconds // 60} 分钟（ROAD_CHAT_IDLE_SECONDS 可改，0 关闭）", flush=True)
     print("停止：Ctrl+C", flush=True)

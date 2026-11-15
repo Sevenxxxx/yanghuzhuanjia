@@ -478,8 +478,9 @@ Restart-Computer -Force
 原对话，只是第一条消息等 15–20 秒。想改时长就在 `roadchat.env` 里改 `ROAD_CHAT_IDLE_SECONDS`（秒，0 关闭），
 然后进 `scripts\p3\server` 执行 `.\service.ps1 restart`。
 
-**并发上限**：由 `deploy.json` 的 `max_visitors` 决定（默认 8）。改完要重跑 `install-chat.ps1`
-让它写进 `roadchat.env`，再 `service.ps1 restart`；改大之前先看内存（每个在线运行时约 200–300MB）。
+**并发上限**：由 `deploy.json` 的 `max_visitors` 决定（默认 8）。服务启动时直接读这个文件，改完
+执行 `.\service.ps1 restart` 就生效，不用重跑 `install-chat.ps1`（`roadchat.env` 里的
+`ROAD_CHAT_MAX_VISITORS` 只作后备）。改大之前先看内存（每个在线运行时约 200–300MB）。
 最多 **`max_visitors` 个人同时在线**（有运行时）。超出的人打开页面会提示
 「暂时已超过使用人数上限（N人），请稍后再试」；只是打开过、或已被空闲回收的人不占名额，
 所以不会出现「名额被旧浏览器占满」的情况。上限不会挤掉已在线的人。

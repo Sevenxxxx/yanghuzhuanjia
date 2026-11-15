@@ -2,6 +2,24 @@
 
 本文件集中维护有日期的验证和历史处理记录；最新复验置于最前。旧路径、旧测试数量和历史人工查看不能作为新版本验证。运行命令与接手入口见 [交接.md](交接.md)。
 
+## 2026-11-15：0.4.15 deploy.json 改完重启即生效
+
+用户把 `deploy.json` 的 `max_visitors` 改成 1 后重启，仍能多台机器同时用。查下来是配置来源问题：
+这两个值只在安装时写进 `roadchat.env`，服务启动只读环境变量，改 `deploy.json` 不重跑安装就不生效。
+
+| 检查 | 结果 |
+|---|---|
+| 现场核对 | `deploy.json` 写 `max_visitors: 1`，`roadchat.env` 仍是 `ROAD_CHAT_MAX_VISITORS=8`，`/api/health` 的 `limit` 是 8 |
+| 改法 | `resolve_password` / `resolve_max_visitors` 增加 `deploy_path`，优先级改为 `deploy.json` > 环境变量 > `config.json` > 默认值；`main()` 传仓库根的 `deploy.json` |
+| 单测 | 新增 5 项（deploy 覆盖环境变量、deploy 空口令关闸、deploy 值非法回落环境变量、deploy 缺失保持环境变量优先等）；`tests.test_p3_chat` 62 项通过 |
+| 实机核对 | 以真实 `deploy.json` 调用解析函数：`max_visitors` 读出 1（环境变量是 8），`password` 读出 `yhg` |
+| 生效方式 | 改 `deploy.json` 后 `service.ps1 restart` 或重启 `RoadChat` 任务即可，不用重跑安装 |
+
+语义未变：`max_visitors` 限制的是**同时在线、已拉起运行时**的访问者数，不是登录名额；口令仍是全站
+共享口令，超出者在点新对话或发消息时被挡。要做到「只允许指定机器访问」仍需网络层限制（防火墙来源 IP）。
+
+未验证：多台机器真实并发占满 1 个名额的表现（本轮只核对了 `limit` 值与阻挡路径的代码）。
+
 ## 2026-11-15：0.4.12 聊天页「初始化 SDK profile 失败」（EPERM）
 
 用户页面点发送后报：`初始化 SDK profile 失败 … EPERM: syscall: 'lstat', path:
