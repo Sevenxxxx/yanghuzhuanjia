@@ -31,7 +31,9 @@ sys.path.insert(0, str(P3))
 from local_web import local_addresses, pick_lan_address  # noqa: E402
 
 PROFILE = "road-sdk"
-VERSION = "0.4.9"
+VERSION = "0.4.10"
+DEFAULT_PASSWORD = "yhg"
+DEFAULT_MAX_VISITORS = 8
 DEFAULT_PORT = 8091
 DEFAULT_ROOT = Path.home() / "dsh-roads"
 # 同一访问者累计开这么多新对话且空闲时，重建运行时，避免会话无限堆积。
@@ -471,7 +473,8 @@ class Visitor:
     def _start_runtime(self):
         """占一个在线名额再起运行时；失败或超额时把名额退回。"""
         if self.service is not None and not self.service.online_slot(self):
-            raise ChatError(self.service.LIMIT_MESSAGE if self.service else "暂时已超过使用人数上限")
+            message = self.service.limit_message if self.service else "暂时已超过使用人数上限"
+            raise ChatError(message)
         self._holds_slot = True
         try:
             return self._spawn()
@@ -752,16 +755,20 @@ class Visitor:
 class ChatService:
     """按访问者分池：一个访问者一个运行时，互不阻塞。"""
 
-    MAX_VISITORS = 8
-    LIMIT_MESSAGE = f"暂时已超过使用人数上限（{MAX_VISITORS}人），请稍后再试"
+    MAX_VISITORS = DEFAULT_MAX_VISITORS
 
-    def __init__(self, root, api_key):
+    def __init__(self, root, api_key, max_visitors=None):
         self.root = Path(root)
         self.api_key = api_key
+        self.max_visitors = max_visitors if max_visitors else self.MAX_VISITORS
         self._visitors = {}
         self._guard = threading.Lock()
         self._stopped = threading.Event()
         self._online = 0            # 已占用的在线名额（有运行时的访问者）
+
+    @property
+    def limit_message(self):
+        return f"暂时已超过使用人数上限（{self.max_visitors}人），请稍后再试"
 
     def visitor(self, visitor_id):
         """按需创建访问者；名额由「在线」决定，见 online_slot()。"""
@@ -778,7 +785,7 @@ class ChatService:
         with self._guard:
             if visitor._holds_slot:
                 return True
-            if self._online >= self.MAX_VISITORS:
+            if self._online >= self.max_visitors:
                 return False
             self._online += 1
             visitor._holds_slot = True
@@ -790,8 +797,8 @@ class ChatService:
 
     def new_session(self, visitor):
         """开新对话前先确认还有在线名额，避免第 9 个人白等一轮。"""
-        if visitor.runtime is None and self._online >= self.MAX_VISITORS:
-            raise ChatError(self.LIMIT_MESSAGE)
+        if visitor.runtime is None and self._online >= self.max_visitors:
+            raise ChatError(self.limit_message)
         return visitor.new_session()
 
     @property
@@ -827,6 +834,7 @@ class ChatService:
         return {
             "ok": True,
             "online": self.online,
+            "limit": self.max_visitors,
             "visitors": len(visitors),
             "ready": sum(1 for v in visitors if v.ready),
             "sessions": sum(v.sessions for v in visitors),
@@ -846,7 +854,6 @@ class ChatService:
 
 # ---------------------------------------------------------------- 访问口令
 
-DEFAULT_PASSWORD = "yhg"
 
 
 def resolve_password(config_path, env_value):
@@ -862,6 +869,31 @@ def resolve_password(config_path, env_value):
             return DEFAULT_PASSWORD
         return str(data.get("password", DEFAULT_PASSWORD) or "").strip()
     return DEFAULT_PASSWORD
+
+
+def resolve_max_visitors(config_path, env_value):
+    """并发上限优先级：环境变量 > config.json 的 max_visitors > 默认 8。"""
+    def as_limit(value):
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number > 0 else None
+
+    if env_value not in (None, ""):
+        limit = as_limit(env_value)
+        if limit is not None:
+            return limit
+    path = Path(config_path)
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return DEFAULT_MAX_VISITORS
+        limit = as_limit(data.get("max_visitors"))
+        if limit is not None:
+            return limit
+    return DEFAULT_MAX_VISITORS
 
 
 def auth_secret(root):
@@ -1206,9 +1238,10 @@ def main(argv=None):
     root.mkdir(parents=True, exist_ok=True)
     config_path = Path(args.config) if args.config else HERE / "config.json"
     password = resolve_password(config_path, os.environ.get("ROAD_CHAT_PASSWORD"))
+    max_visitors = resolve_max_visitors(config_path, os.environ.get("ROAD_CHAT_MAX_VISITORS"))
     Handler.password = password
     Handler.secret = auth_secret(root) if password else ""
-    service = ChatService(root, read_api_key(root))
+    service = ChatService(root, read_api_key(root), max_visitors=max_visitors)
     idle_seconds = int(os.environ.get("ROAD_CHAT_IDLE_SECONDS", "1800") or 0)
     service.start_reaper(idle_seconds)
     Handler.service = service
@@ -1220,6 +1253,7 @@ def main(argv=None):
     marker.write_text(url, encoding="utf-8")
     print(f"道路养护专家已启动：{url}（按访问者隔离运行时）", flush=True)
     print("口令：已启用（登录页输入）" if password else "口令：未启用（config.json 里 password 为空）", flush=True)
+    print(f"并发上限：{max_visitors} 人（deploy.json 的 max_visitors 或 ROAD_CHAT_MAX_VISITORS）", flush=True)
     if idle_seconds > 0:
         print(f"空闲回收：{idle_seconds // 60} 分钟（ROAD_CHAT_IDLE_SECONDS 可改，0 关闭）", flush=True)
     print("停止：Ctrl+C", flush=True)

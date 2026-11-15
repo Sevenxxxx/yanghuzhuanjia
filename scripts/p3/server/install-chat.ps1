@@ -11,6 +11,7 @@ param(
     [string]$Domain = '',
     [switch]$Https,
     [int]$HttpPort = 0,
+    [int]$MaxVisitors = 8,
     [string]$AppDir = 'C:\road\app',
     [string]$WorkDir = 'C:\road\work',
     [string]$EtcDir = 'C:\road\etc',
@@ -87,6 +88,7 @@ if ($Deploy) {
     if ($Deploy.paths.specs) { $SpecDir = Expand-DeployPath $Deploy.paths.specs }
     if ($Deploy.service_user) { $ServiceUser = $Deploy.service_user }
     if ($Deploy.domain) { $Domain = $Deploy.domain }
+    if ($Deploy.max_visitors) { $MaxVisitors = [int]$Deploy.max_visitors }
     if ($null -ne $Deploy.https) { $Https = [bool]$Deploy.https }
     if ($Deploy.http_port) { $HttpPort = [int]$Deploy.http_port }
     if (-not $ApiKey -and $Deploy.api_key) { $ApiKey = $Deploy.api_key }
@@ -147,6 +149,7 @@ Set-Content -Path (Join-Path $EtcDir 'roadchat.env') -Encoding utf8 -Value @(
     "ROAD_CHAT_PATCH=$EtcDir\proxy.patch.yml"
     "ROAD_EXPERT_CONFIG=$EtcDir\config.json"
     "ROAD_CHAT_PASSWORD=$GatePassword"
+    "ROAD_CHAT_MAX_VISITORS=$MaxVisitors"
     'ROAD_CHAT_IDLE_SECONDS=1800'
 )
 Set-Content -Path (Join-Path $EtcDir 'proxy.env') -Encoding utf8 -Value "DEEPSEEK_API_KEY=$ApiKey"
@@ -335,7 +338,7 @@ Write-Host @"
 已启动。检查：
   Invoke-RestMethod http://127.0.0.1:$ChatPort/api/health
   Get-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy | Select TaskName,State
-$(if ($UseHttps) { "  试用地址： https://<公网IP>:8443/   （自签证书，浏览器会提示不安全）" } else { "  地址： http://<公网IP>:$HttpPort/   （纯 HTTP；口令与内容在链路上是明文）" })
+$(if ($UseHttps) { "  试用地址： https://<公网IP>:8443/   （自签证书，浏览器会提示不安全）" } else { "  地址： http://<公网IP>:$HttpPort/   （纯 HTTP；口令与内容在链路上是明文；并发上限 $MaxVisitors 人）" })
 $(if ($Domain) { if ($UseHttps) { "  域名地址： https://$Domain/   （Caddy 自动申请证书，需要 80 端口可达）" } else { "  域名地址： http://${Domain}:$HttpPort/   （需要控制台放行该端口；用 80 需备案）" } })
 完成后再跑 acceptance.ps1。
 "@ -ForegroundColor Green

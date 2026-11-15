@@ -136,6 +136,43 @@ class PasswordTests(unittest.TestCase):
             self.assertEqual(app.resolve_password(broken, None), app.DEFAULT_PASSWORD)
 
 
+class MaxVisitorsConfigTests(unittest.TestCase):
+    def test_default_is_eight(self):
+        with tempfile.TemporaryDirectory() as folder:
+            missing = Path(folder) / "deploy.json"
+            self.assertEqual(app.resolve_max_visitors(missing, None), 8)
+
+    def test_environment_wins(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "deploy.json"
+            path.write_text('{"max_visitors": 3}', encoding="utf-8")
+            self.assertEqual(app.resolve_max_visitors(path, "12"), 12)
+
+    def test_file_value_is_used(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "deploy.json"
+            path.write_text('{"max_visitors": 5}', encoding="utf-8")
+            self.assertEqual(app.resolve_max_visitors(path, None), 5)
+
+    def test_invalid_values_fall_back_to_default(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "deploy.json"
+            path.write_text('{"max_visitors": "abc"}', encoding="utf-8")
+            self.assertEqual(app.resolve_max_visitors(path, None), 8)
+            self.assertEqual(app.resolve_max_visitors(path, "0"), 8)
+
+    def test_service_uses_configured_limit_in_message(self):
+        service = app.ChatService(Path("."), "sk-test", max_visitors=2)
+        visitors = [service.visitor(f"{index:032x}") for index in range(2)]
+        for visitor in visitors:
+            self.assertTrue(service.online_slot(visitor))
+        ninth = service.visitor("f" * 32)
+        with self.assertRaises(app.ChatError) as raised:
+            service.new_session(ninth)
+        self.assertIn("（2人）", str(raised.exception))
+        self.assertEqual(service.health()["limit"], 2)
+
+
 class AuthCookieTests(unittest.TestCase):
     def test_roundtrip(self):
         cookie = app.make_auth_cookie("secret", now=1000)

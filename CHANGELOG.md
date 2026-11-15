@@ -3,6 +3,12 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.10（2026-11-15）
+
+- 并发上限可配置：`deploy.json` 新增 `max_visitors`（默认 8），换算到 `roadchat.env` 的
+  `ROAD_CHAT_MAX_VISITORS`；`/api/health` 返回 `limit`，`service.ps1 status` 显示 `在线=x/limit`。
+- 非正数或非法值回落到 8。
+
 ## 0.4.9（2026-11-15）
 
 - 修复 `roadchat` 无法进入桌面仓库（`Set-Location` 报拒绝访问）：上级目录的授权从「仅穿越」

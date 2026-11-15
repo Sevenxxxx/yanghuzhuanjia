@@ -1,10 +1,11 @@
 {
-  "_说明": "复制成 deploy.json 再填。deploy.json 已在 .gitignore 里，不会提交，也不会出现在任何推送。password 留空表示打开页面不要口令；api_key 是【产品】用的 key，服务器上只会被写进 proxy.env（ACL 仅管理员可读）；你自己 dsh web 的管理 key 另放 C:\\Users\\Administrator\\.dsh\\.credentials.yaml，两把分开。https=false 表示纯 HTTP（口令与内容在链路上是明文），端口用 http_port；改成 true 后 Caddy 自动申请证书并跳 HTTPS。domain 填你的域名后，HTTP 模式直接 http://域名:端口 访问；HTTPS 模式则用 https://域名/。paths 里的 %USERPROFILE% 会被脚本展开成当前用户的目录；app 与 specs 可以放在桌面，work/etc 建议留在 C:\\road。",
+  "_说明": "复制成 deploy.json 再填。deploy.json 已在 .gitignore 里，不会提交，也不会出现在任何推送。password 留空表示打开页面不要口令；api_key 是【产品】用的 key，服务器上只会被写进 proxy.env（ACL 仅管理员可读）；你自己 dsh web 的管理 key 另放 C:\\\\Users\\\\Administrator\\\\.dsh\\\\.credentials.yaml，两把分开。max_visitors 是同时在线人数上限（默认 8），改完要重跑 install-chat.ps1 生效。https=false 表示纯 HTTP（口令与内容在链路上是明文），端口用 http_port；改成 true 后 Caddy 自动申请证书并跳 HTTPS。domain 填你的域名后，HTTP 模式直接 http://域名:端口 访问；HTTPS 模式则用 https://域名/。paths 里的 %USERPROFILE% 会被脚本展开成当前用户的目录；app 与 specs 可以放在桌面，work/etc 建议留在 C:\\\\road。",
   "password": "yhg",
   "api_key": "sk-替换成你的 key",
   "domain": "",
   "https": false,
   "http_port": 8443,
+  "max_visitors": 8,
   "service_user": "roadchat",
   "paths": {
     "app": "%USERPROFILE%\\Desktop\\yanghuzhuanjia",

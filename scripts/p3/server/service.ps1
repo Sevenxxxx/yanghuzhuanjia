@@ -36,7 +36,7 @@ function Show-Status {
     Write-Host "`n== 健康检查 ==" -ForegroundColor Cyan
     try {
         $health = Invoke-RestMethod 'http://127.0.0.1:8095/api/health' -TimeoutSec 5
-        Write-Host ("  聊天服务 ok={0} 在线={1}/8 访问者={2} 就绪={3} 会话={4}" -f $health.ok, $health.online, $health.visitors, $health.ready, $health.sessions) -ForegroundColor Green
+        Write-Host ("  聊天服务 ok={0} 在线={1}/{2} 访问者={3} 就绪={4} 会话={5}" -f $health.ok, $health.online, $health.limit, $health.visitors, $health.ready, $health.sessions) -ForegroundColor Green
     } catch {
         Write-Host '  聊天服务无响应' -ForegroundColor Red
     }

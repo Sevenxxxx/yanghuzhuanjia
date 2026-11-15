@@ -218,6 +218,7 @@ notepad "$env:USERPROFILE\Desktop\yanghuzhuanjia\deploy.json"
   "domain": "你的域名",
   "https": false,
   "http_port": 8443,
+  "max_visitors": 8,
   "service_user": "roadchat",
   "paths": {
     "app": "%USERPROFILE%\\Desktop\\yanghuzhuanjia",
@@ -477,8 +478,10 @@ Restart-Computer -Force
 原对话，只是第一条消息等 15–20 秒。想改时长就在 `roadchat.env` 里改 `ROAD_CHAT_IDLE_SECONDS`（秒，0 关闭），
 然后进 `scripts\p3\server` 执行 `.\service.ps1 restart`。
 
-**并发上限**：最多 **8 个人同时在线**（有运行时）。第 9 个同时在线的人打开页面会提示
-「暂时已超过使用人数上限（8人），请稍后再试」；只是打开过、或已被空闲回收的人不占名额，
+**并发上限**：由 `deploy.json` 的 `max_visitors` 决定（默认 8）。改完要重跑 `install-chat.ps1`
+让它写进 `roadchat.env`，再 `service.ps1 restart`；改大之前先看内存（每个在线运行时约 200–300MB）。
+最多 **`max_visitors` 个人同时在线**（有运行时）。超出的人打开页面会提示
+「暂时已超过使用人数上限（N人），请稍后再试」；只是打开过、或已被空闲回收的人不占名额，
 所以不会出现「名额被旧浏览器占满」的情况。上限不会挤掉已在线的人。
 
 **日常**：三个任务开机自启、失败每分钟重试，一般不用管。每周看一眼 `C:\road\work` 占用
