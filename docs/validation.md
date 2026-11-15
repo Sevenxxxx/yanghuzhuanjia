@@ -2,6 +2,29 @@
 
 本文件集中维护有日期的验证和历史处理记录；最新复验置于最前。旧路径、旧测试数量和历史人工查看不能作为新版本验证。运行命令与接手入口见 [交接.md](交接.md)。
 
+## 2026-11-15：0.4.11 安装自检、遗留进程与代理 /models
+
+真机第 3 次部署（Windows Server 2022，主机 `10_1_0_8`，域名 `uintkj128.asia`）暴露三件事：0.4.9 之前的
+授权缺口已由 RX 修复；`install-chat.ps1` 的服务账户自检本身有解析错误，每次都以红字告终，容易被读成
+“权限还是不行”；反复重跑留下的孤儿进程占住 8095／8096／8443，让新任务起不来。
+
+| 检查 | 结果 |
+|---|---|
+| 复现自检报错 | `if (...) {...} else {...} | Out-File` 在 PowerShell 5.1 报「不能使用空管道元素」，每次安装都出现 |
+| 修复自检 | 改为 `& { ... } \| Out-File`；写不出结果时黄字提示，不再静默视为通过 |
+| 修复遗留进程 | 启动任务前按命令行匹配清理 chat／proxy／caddy 进程 |
+| 修复前实测 | 曾积压 5 个 `model_proxy` 抢 8096、1 个旧 `caddy` 占 8443；`RoadCaddy` 上次结果 1 |
+| `/models` | 上游 `api.deepseek.com/anthropic` 无此接口，转发返回 404，acceptance 该项必挂；改为本地返回模型列表 |
+| 安装重跑 | 连续 3 次 exit 0（含一次刻意重跑）；两次自检均打印「服务账户可访问仓库」 |
+| 服务状态 | 三个计划任务 Running；8095／8096／8443 各一个进程，身份分别为 roadchat／SYSTEM／SYSTEM |
+| 门槛 | `acceptance.ps1` 14 项全部通过 |
+| 线上探测 | `http://uintkj128.asia:8443/` 与局域网 200；口令正确 200、错误 401；经 8096 转发 `/v1/messages` 返回 200（1 token） |
+| 单元测试 | `python -X utf8 -m unittest discover -s tests` 共 211 项，209 通过；2 项 Word 导出因缺 `document_python` 报错（本机环境限制，与本轮改动无关）；新增 `tests/test_p3_proxy.py` 3 项通过 |
+| 脚本检查 | `install-chat.ps1` PowerShell 解析通过、UTF-8 BOM 保留 |
+
+未验证：重启后计划任务自动拉起、双浏览器互不影响、三条攻击演练、真人工程审核；`deploy.json` 仍为
+`https=false`，口令与内容在链路上是明文。测试通过不等于可以对外发口令。
+
 ## 2026-11-15：0.4.5 修复部署脚本的 Python 下载
 
 首次真机部署时 `bootstrap-windows.ps1` 在 Python 步骤 404：脚本按 `python.org` 目录列表取了最新

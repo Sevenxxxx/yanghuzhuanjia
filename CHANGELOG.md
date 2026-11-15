@@ -3,6 +3,17 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.11（2026-11-15）
+
+- 修复 `install-chat.ps1` 的服务账户自检一直失败：`if (...) {...} else {...} | Out-File` 在
+  PowerShell 5.1 是解析错误（不能使用空管道元素），每次安装都报 `ParserError`，看起来像 ACL 仍不通过。
+  改为 `& { ... } | Out-File` 后，自检真的以 `roadchat` 身份访问仓库与规范库并打印结论。
+- 自检没写出结果时明确提示，不再静默当作通过。
+- 重跑安装前先清理上次遗留的 chat／proxy／caddy 进程：旧进程占着 8095／8096／8443 会让新任务起不来、
+  `RoadCaddy` 退出码 1，表现为「装了好几次都没成功」。
+- 模型代理 `/models` 改为本地应答：上游是 Anthropic 兼容端点，没有该接口，原实现转发过去 404，
+  使 `acceptance.ps1` 的「代理转发」一项必然失败；顺带作为代理存活探测点。
+
 ## 0.4.10（2026-11-15）
 
 - 并发上限可配置：`deploy.json` 新增 `max_visitors`（默认 8），换算到 `roadchat.env` 的

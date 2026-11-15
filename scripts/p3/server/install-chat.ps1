@@ -62,7 +62,8 @@ function Test-AsServiceUser([string]$path, [string]$password) {
     $out = Join-Path $WorkDir 'acl-check.txt'
     Remove-Item $out -Force -ErrorAction SilentlyContinue
     $cred = New-Object System.Management.Automation.PSCredential($ServiceUser, (ConvertTo-SecureString $password -AsPlainText -Force))
-    $script = "if (Test-Path '$path') { 'OK' } else { 'DENIED' } | Out-File -FilePath '$out' -Encoding utf8"
+    # if 语句的输出不能直接接管道（PS 5.1 报「不能使用空管道元素」），先包一层脚本块
+    $script = "& { if (Test-Path '$path') { 'OK' } else { 'DENIED' } } | Out-File -FilePath '$out' -Encoding utf8"
     try {
         Start-Process powershell -Credential $cred -ArgumentList '-NoProfile', '-WindowStyle', 'Hidden', '-Command', $script -Wait -ErrorAction Stop
     } catch {
@@ -77,6 +78,8 @@ function Test-AsServiceUser([string]$path, [string]$password) {
             Write-Host "服务账户仍无法访问仓库：$path（检查桌面是否被重定向）" -ForegroundColor Red
         }
         Remove-Item $out -Force -ErrorAction SilentlyContinue
+    } else {
+        Write-Host "服务账户没写出检查结果：$out（自身也写不了 $WorkDir，检查无效）" -ForegroundColor DarkYellow
     }
 }
 
@@ -214,6 +217,15 @@ Get-Content '$EtcDir\proxy.env' | ForEach-Object {
 "@
 
 Step '计划任务'
+
+function Stop-StaleServiceProcesses {
+    # 上一次安装遗留的进程占着 8095/8096/8443，新任务起不来，看起来就是「安装失败」
+    Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='caddy.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'p3\\chat\\app\.py|p3\\proxy\\model_proxy\.py|road\\caddy\\caddy\.exe' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 1
+}
+Stop-StaleServiceProcesses
 
 function Grant-BatchLogon([string]$account) {
     # 计划任务「不论用户是否登录都运行」用的是批量登录权限，普通账户默认没有

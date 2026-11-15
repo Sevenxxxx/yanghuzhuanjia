@@ -76,6 +76,17 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(detail)
 
     def do_GET(self):
+        # 上游是 Anthropic 兼容端点，没有 /models；本地直接答，顺带作为存活探测点
+        if self.path.split("?")[0] == "/models":
+            payload = json.dumps(
+                {"object": "list", "data": [{"id": "deepseek-chat", "object": "model", "owned_by": "deepseek"}]}
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         self._proxy("GET")
 
     def do_POST(self):
