@@ -3,6 +3,14 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.12（2026-11-15）
+
+- 修复聊天页「运行时启动失败：初始化 SDK profile 失败」：dsh 装在用户 `%APPDATA%\npm` 时，
+  `roadchat` 对该目录只拿到穿越（`X`），而 Node 解析模块路径要对沿途每一层做 `stat`/`realpath`，
+  直接 `EPERM`。改为对该层目录本身给读+穿越（`RX`，不继承，子目录仍不可读）。
+- `acceptance.ps1` 新增「服务账户能初始化 dsh（realpath 不报 EPERM）」检查，并支持 `deploy.json`
+  的 `service_user`；这类失败以前要等页面上报才发现。
+
 ## 0.4.11（2026-11-15）
 
 - 修复 `install-chat.ps1` 的服务账户自检一直失败：`if (...) {...} else {...} | Out-File` 在

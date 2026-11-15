@@ -8,6 +8,7 @@ param(
     [string]$AppDir = 'C:\road\app',
     [string]$WorkDir = 'C:\road\work',
     [string]$EtcDir = 'C:\road\etc',
+    [string]$ServiceUser = 'roadchat',
     [int]$ChatPort = 8095,
     [int]$ProxyPort = 8096
 )
@@ -22,6 +23,7 @@ if (Test-Path $ConfigPath) {
     if ($Deploy.paths.work) { $WorkDir = [Environment]::ExpandEnvironmentVariables($Deploy.paths.work) }
     if ($Deploy.paths.etc) { $EtcDir = [Environment]::ExpandEnvironmentVariables($Deploy.paths.etc) }
     if ($Deploy.http_port) { $HttpPort = [int]$Deploy.http_port }
+    if ($Deploy.service_user) { $ServiceUser = $Deploy.service_user }
 }
 $script:pass = 0
 $script:fail = 0
@@ -88,6 +90,20 @@ foreach ($task in @('RoadChat', 'RoadModelProxy', 'RoadCaddy')) {
 }
 
 Write-Host '== 4. 权限与密钥 ==' -ForegroundColor Cyan
+Check '服务账户能初始化 dsh（realpath 不报 EPERM）' {
+    $dshDir = Split-Path (Get-Command dsh -ErrorAction Stop).Source -Parent
+    $node = (Get-Command node -ErrorAction Stop).Source
+    $jsFile = Join-Path $WorkDir 'acceptance-realpath.js'
+    $outFile = Join-Path $WorkDir 'acceptance-realpath.txt'
+    Remove-Item $outFile -Force -ErrorAction SilentlyContinue
+    $js = "const fs=require('fs');const dir=process.argv[2],out=process.argv[3];" +
+        "try{fs.realpathSync(dir);fs.writeFileSync(out,'OK')}catch(e){fs.writeFileSync(out,'ERR '+e.code)}"
+    Set-Content -Path $jsFile -Value $js -Encoding utf8
+    $pw = (Get-Content (Join-Path $EtcDir "$ServiceUser-password.txt") -Raw).Trim()
+    $cred = New-Object System.Management.Automation.PSCredential($ServiceUser, (ConvertTo-SecureString $pw -AsPlainText -Force))
+    Start-Process -FilePath $node -Credential $cred -ArgumentList @($jsFile, $dshDir, $outFile) -Wait -WindowStyle Hidden
+    (Test-Path $outFile) -and ((Get-Content $outFile -Raw).Trim() -eq 'OK')
+}
 Check '程序目录对 roadchat 不可写' {
     $acl = (Get-Acl $AppDir).Access | Where-Object { $_.IdentityReference -like '*roadchat*' }
     -not ($acl | Where-Object { $_.FileSystemRights -match 'Write|Modify|FullControl' -and $_.AccessControlType -eq 'Allow' })

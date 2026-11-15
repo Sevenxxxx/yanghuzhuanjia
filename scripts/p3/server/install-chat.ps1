@@ -126,13 +126,15 @@ if ($machinePath -notlike "*$dshDir*") {
 }
 icacls $dshDir /grant "${ServiceUser}:(OI)(CI)RX" | Out-Null
 
-# dsh 在某个用户目录下时，只给「穿越」权限，不给列目录，避免暴露该用户资料
+# dsh 在某个用户目录下时，沿途每一层要给「读+穿越」（RX）：Node 解析模块路径时会对每层做
+# stat/realpath，只给 X（穿越）会直接 EPERM，聊天页表现为「初始化 SDK profile 失败」。
+# 这里用的 (RX) 不继承，只放开该层目录本身，子目录仍读不到，不暴露该用户的资料。
 $profileRoot = [Environment]::GetFolderPath('UserProfile')
 if ($dshDir.StartsWith($profileRoot, [StringComparison]::OrdinalIgnoreCase)) {
     foreach ($ancestor in @($profileRoot, (Join-Path $profileRoot 'AppData'), (Join-Path $profileRoot 'AppData\Roaming'))) {
-        if (Test-Path $ancestor) { icacls $ancestor /grant "${ServiceUser}:(X)" | Out-Null }
+        if (Test-Path $ancestor) { icacls $ancestor /grant "${ServiceUser}:(RX)" | Out-Null }
     }
-    Write-Host "已给 $ServiceUser 穿越 $profileRoot 的权限（仅穿越，不能列目录）"
+    Write-Host "已给 $ServiceUser 读+穿越 $profileRoot 及 AppData 目录本身的权限（不继承，子目录不可读）"
 }
 if (-not (Test-Path (Join-Path $EtcDir "$ServiceUser-password.txt"))) {
     throw "缺少 $EtcDir\$ServiceUser-password.txt；先跑 bootstrap-windows.ps1"

@@ -2,6 +2,25 @@
 
 本文件集中维护有日期的验证和历史处理记录；最新复验置于最前。旧路径、旧测试数量和历史人工查看不能作为新版本验证。运行命令与接手入口见 [交接.md](交接.md)。
 
+## 2026-11-15：0.4.12 聊天页「初始化 SDK profile 失败」（EPERM）
+
+用户页面点发送后报：`初始化 SDK profile 失败 … EPERM: syscall: 'lstat', path:
+'C:\Users\Administrator\AppData\Roaming'`。服务健康检查与安装自检都是绿的，问题只在真正拉起访客运行时才暴露。
+
+| 检查 | 结果 |
+|---|---|
+| 复现 | 以 `roadchat` 身份跑 `fs.statSync`/`realpathSync('…\AppData\Roaming')` → `EPERM`；`accessSync` 却是 ok |
+| 原因 | 该层只给了穿越（`X`，FILE_TRAVERSE）；Node 解析模块路径要对沿途每层 `stat`，需要该目录本身的读权限 |
+| 修复 | 安装脚本改为对该层给 `RX`；ACE 不继承（`InheritanceFlags=None`），子目录仍不可读 |
+| 子目录仍受限 | 以 `roadchat` 读 `AppData\Roaming\Microsoft` 及其 `Windows` → 仍 `EPERM` |
+| 修复后 | 同一 realpath 探测 → ok；页面点「nihao」收到正常中文回复，`assistant` 事件完整 |
+| 新门槛 | `acceptance.ps1` 增加「服务账户能初始化 dsh（realpath 不报 EPERM）」，用服务账户真跑一次 node；现 15 项全部通过 |
+| 安装重跑 | `install-chat.ps1` exit 0，ACL 自检两项绿色 |
+| 单元测试 | `python -X utf8 -m unittest discover -s tests` 211 项，209 通过；2 项 Word 导出仍因缺 `document_python` 报错（环境限制） |
+
+未验证：重启后自启、双浏览器互不影响、三条攻击演练、真人工程审核。后续可考虑把全局 dsh 装到
+`C:\road\node`，让服务账户完全不必触碰用户目录；本轮只放开该层目录本身，未移动安装位置。
+
 ## 2026-11-15：0.4.11 安装自检、遗留进程与代理 /models
 
 真机第 3 次部署（Windows Server 2022，主机 `10_1_0_8`，域名 `uintkj128.asia`）暴露三件事：0.4.9 之前的
