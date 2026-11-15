@@ -611,7 +611,7 @@ class Visitor:
         self.abandon_all()
         still_running = bool(self._active)
         self.sessions += 1
-        if self.sessions > REBUILD_AFTER and not still_running:
+        if self.sessions >= REBUILD_AFTER and not still_running:
             # 重建放在后台：不阻塞这次开新对话，下一条消息会自动拉起新运行时
             threading.Thread(target=self.restart, name=f"rebuild-{self.id}", daemon=True).start()
             self.sessions = 1

@@ -281,6 +281,16 @@ class VisitorTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertEqual(visitor.restarts, ["web-a"])
 
+    def test_rebuild_on_eighth_new_session(self):
+        visitor = make_visitor()
+        visitor.sessions = app.REBUILD_AFTER - 1
+        visitor.new_session()
+        deadline = time.time() + 2
+        while not visitor.restarts and time.time() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(visitor.restarts, [None])
+        self.assertEqual(visitor.sessions, 1)
+
     def test_rebuild_after_many_new_sessions(self):
         visitor = make_visitor()
         visitor.sessions = app.REBUILD_AFTER
