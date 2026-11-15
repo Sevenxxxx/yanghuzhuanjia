@@ -37,7 +37,7 @@ DEFAULT_MAX_VISITORS = 8
 DEFAULT_PORT = 8091
 DEFAULT_ROOT = Path.home() / "dsh-roads"
 # 同一访问者累计开这么多新对话且空闲时，重建运行时，避免会话无限堆积。
-REBUILD_AFTER = 8
+REBUILD_AFTER = 5
 PAGE = HERE / "page.html"
 WEB_PATCH = P3 / "road_expert.patch.yml"
 
