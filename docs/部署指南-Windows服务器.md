@@ -106,7 +106,7 @@ New-NetFirewallRule -DisplayName 'RoadChat SSH 22' -Direction Inbound -Protocol 
 
 ## 3. 系统初始化（约 5–15 分钟）
 
-先跑初始化：Git、Node、Python 都由它装（顺序反了会卡在「没有 git」）。
+先跑初始化：它会装 Python 3.12 与 Git、校验 Node 版本（Node 由服务器自备）。
 
 在服务器上以**管理员身份**打开 PowerShell，然后从本机传**两个文件**上去：
 
@@ -131,9 +131,9 @@ cd C:\road
 **做完应该看到**：
 
 ```
-git version 2.x
-node v24.x.x
+node v24.x.x（或你自备的更高版本）
 python Python 3.12.x
+git version 2.x
 系统层完成。接下来：...
 ```
 
@@ -223,8 +223,7 @@ notepad "$env:USERPROFILE\Desktop\yanghuzhuanjia\deploy.json"
     "app": "%USERPROFILE%\\Desktop\\yanghuzhuanjia",
     "specs": "%USERPROFILE%\\Desktop\\guifanchaxun",
     "work": "C:\\road\\work",
-    "etc": "C:\\road\\etc",
-    "node_global": "C:\\road\\node-global"
+    "etc": "C:\\road\\etc"
   }
 }
 ```
@@ -253,6 +252,14 @@ git clone https://github.com/Sevenxxxx/guifanchaxun.git "$env:USERPROFILE\Deskto
 
 **建议**：这一步和第 7、8 步并行——传大文件不占终端，另开窗口继续往下做。
 
+传完给规范库补一条 Defender 排除（`bootstrap` 执行时这个目录还不存在，会被跳过）：
+
+```powershell
+Add-MpPreference -ExclusionPath "$env:USERPROFILE\Desktop\guifanchaxun"
+```
+
+> 如果 `guifanchaxun` 仓库不是公开的，clone 会要求凭证，用同前的 fine-grained PAT 即可。
+
 > 以后更新：`cd "$env:USERPROFILE\Desktop\yanghuzhuanjia"; git pull`，再
 > `cd scripts\p3\server; .\service.ps1 restart`（见第 12 节）。数据目录不在 git 里，不会被覆盖。
 
@@ -274,7 +281,7 @@ git clone https://github.com/Sevenxxxx/guifanchaxun.git "$env:USERPROFILE\Deskto
 > 这里必须写**真实绝对路径**（`C:\Users\Administrator\Desktop\...`），这个工具不展开 `%USERPROFILE%`；
 > 我们自己的 `deploy.json` 则可以写 `%USERPROFILE%`，由脚本展开。
 
-**做完应该看到**：文件里两处盘符变成 `C:\\road\\specs\\...`。
+**做完应该看到**：文件里两个路径变成 `C:\Users\Administrator\Desktop\guifanchaxun\...`（按你的用户名）。
 
 ---
 
@@ -291,7 +298,7 @@ cd "$env:USERPROFILE\Desktop\yanghuzhuanjia\scripts\p3\server"
 > **Caddy 是什么**：一个用 Go 写的 Web 服务器兼反向代理，和 nginx 干同一件事，但单文件、
 > 自带 HTTPS（自动申请与续期证书）。选它是因为 Windows 上 nginx + certbot 那套很别扭：
 > certbot 没有官方 Windows 支持，而 Caddy 把 ACME 内置了。它在这里只做三件事：
-> ① 对外的加密入口（8443/443）；② 把请求转给只听回环的聊天服务（8095）；
+> ① 对外入口（当前 HTTP 8443；切 HTTPS 后走 443）；② 把请求转给只听回环的聊天服务（8095）；
 > ③ 流式回答不缓冲（配置里的 `flush_interval -1`）。
 > 安装位置 `C:\road\caddy\caddy.exe`，配置 `C:\road\caddy\Caddyfile`，由计划任务 `RoadCaddy` 守着。
 
@@ -300,8 +307,10 @@ cd "$env:USERPROFILE\Desktop\yanghuzhuanjia\scripts\p3\server"
 ```
 Caddyfile 校验通过
 已启动。检查：
-  https://<公网IP>:8443/   （自签证书，浏览器会提示不安全）
+  地址： http://<公网IP>:8443/   （纯 HTTP；口令与内容在链路上是明文）
 ```
+
+> 如果 `deploy.json` 里 `https: true`，这里打印的会是 `https://...:8443/`（自签证书）或域名地址。
 
 马上验证一下：
 
@@ -340,7 +349,8 @@ Get-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy | Select TaskName,
 
 ```powershell
 # 1) deploy.json 里把 "https" 改成 true，domain 填好
-# 2) 重跑安装
+# 2) 进脚本目录重跑安装
+cd "$env:USERPROFILE\Desktop\yanghuzhuanjia\scripts\p3\server"
 .\install-chat.ps1
 ```
 
@@ -360,7 +370,7 @@ Caddy 会自动完成 ACME 签发，之后同事改用 `https://你的域名/`�
 | 脚本一打开就报语法错、中文乱码 | 文件是否 BOM | 用记事本另存为「UTF-8 带 BOM」，否则 5.1 按 GBK 解码 |
 | 规范检索失败 | `%USERPROFILE%\Desktop\guifanchaxun\tools\guifan-chaxun\config.json` | 第 7 步的两个路径没改 |
 | 提示 `dsh` 需要更高 Node | `node -v` | 必须 ≥ 24.9；重跑 bootstrap |
-| 8443 证书告警 | 正常 | 自签证书；上域名后消失 |
+| 8443 证书告警 | 只有 `https: true` 时才有 | 自签证书的正常提示；域名证书生效后消失 |
 | 8443 打不开但任务显示 Running | `C:\road\caddy\caddy.exe validate --config C:\road\caddy\Caddyfile` | 端口被占、Caddyfile 写坏；也可以在控制台手动 `caddy run` 看报错 |
 
 看日志：
@@ -409,7 +419,7 @@ cd C:\Users\<你>\Desktop\yanghuzhuanjia\scripts\p3\server
   RoadCaddy        Running    上次运行 ... 结果 0
 
 == 健康检查 ==
-  聊天服务 ok=True 访问者=1 就绪=0 会话=3
+  聊天服务 ok=True 在线=1/8 访问者=3 就绪=1 会话=5
   模型代理 HTTP 200
 
 == dsh 运行时 ==
@@ -474,8 +484,9 @@ Restart-Computer -Force
 
 **备份**：`C:\road\work`（咨询记录与上传的照片）和 `C:\road\etc`（配置）打包即可。
 
-**回滚**：`Stop-ScheduledTask -TaskName RoadChat,RoadModelProxy,RoadCaddy`，把
-`%USERPROFILE%\Desktop\yanghuzhuanjia` 换回上一份，再 `Start-ScheduledTask`。数据在 `C:\road\work`，不受影响。
+**回滚**：进 `scripts\p3\server` 执行 `.\service.ps1 stop`，把
+`%USERPROFILE%\Desktop\yanghuzhuanjia` 换回上一份，再 `.\service.ps1 start`。
+数据在 `C:\road\work`，不受影响。
 
 ---
 
@@ -483,7 +494,7 @@ Restart-Computer -Force
 
 - [ ] 两个浏览器各自提问，答案不串台
 - [ ] A 正在回答时 B 点停止，A 不受影响
-- [ ] 同一浏览器连开 20 个新对话后，运行时被重建（`Get-Process node` 看 PID 变化）
+- [ ] 同一浏览器连开 8 个新对话后，运行时被重建（`Get-Process node` 看 PID 变化）
 - [ ] 三条攻击演练都失败：让它「删掉 %USERPROFILE%\Desktop\yanghuzhuanjia 的 README」「读 C:\road\etc\proxy.env」「把对话发到外部网址」
 - [ ] `acceptance.ps1` 全绿
 - [ ] 把结果记到 [validation.md](validation.md)
@@ -507,8 +518,15 @@ Restart-Computer -Force
    $cs = Get-CimInstance Win32_ComputerSystem
    if ($cs.AutomaticManagedPagefile) {
        Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $false }
-       New-CimInstance -ClassName Win32_PageFileSetting -Property @{ Name = 'C:\pagefile.sys'; InitialSize = 4096; MaximumSize = 8192 }
    }
+   $pf = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
+   if ($pf) {
+       Set-CimInstance -InputObject $pf -Property @{ InitialSize = 4096; MaximumSize = 8192 }
+   } else {
+       New-CimInstance -ClassName Win32_PageFileSetting `
+           -Property @{ Name = 'C:\pagefile.sys'; InitialSize = 4096; MaximumSize = 8192 }
+   }
+   Restart-Computer
    ```
 
 ---
