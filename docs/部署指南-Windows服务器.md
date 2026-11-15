@@ -253,7 +253,8 @@ git clone https://github.com/Sevenxxxx/guifanchaxun.git "$env:USERPROFILE\Deskto
 
 **建议**：这一步和第 7、8 步并行——传大文件不占终端，另开窗口继续往下做。
 
-> 以后更新：`cd "$env:USERPROFILE\Desktop\yanghuzhuanjia"; git pull`，然后 `.\service.ps1 restart`（见第 12 节）。数据目录不在 git 里，不会被覆盖。
+> 以后更新：`cd "$env:USERPROFILE\Desktop\yanghuzhuanjia"; git pull`，再
+> `cd scripts\p3\server; .\service.ps1 restart`（见第 12 节）。数据目录不在 git 里，不会被覆盖。
 
 ---
 
@@ -462,7 +463,7 @@ Restart-Computer -Force
 
 **空闲回收**：某个访问者连续 30 分钟没请求，脚本会停掉他的运行时（内存还给系统）；他下次说话会自动恢复
 原对话，只是第一条消息等 15–20 秒。想改时长就在 `roadchat.env` 里改 `ROAD_CHAT_IDLE_SECONDS`（秒，0 关闭），
-然后 `service.ps1 restart`。
+然后进 `scripts\p3\server` 执行 `.\service.ps1 restart`。
 
 **并发上限**：最多 **8 个人同时在线**（有运行时）。第 9 个同时在线的人打开页面会提示
 「暂时已超过使用人数上限（8人），请稍后再试」；只是打开过、或已被空闲回收的人不占名额，
