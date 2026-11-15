@@ -944,6 +944,17 @@ def _sign(secret, expires):
     return hmac.new(secret.encode(), str(expires).encode(), hashlib.sha256).hexdigest()
 
 
+def cookie_secret(base_secret, password):
+    """口令 cookie 的签名密钥：由落盘的 base_secret 与当前口令共同派生。
+
+    口令一改，派生值就变，所有旧 cookie 立即失效——换口令才能真正把人挡在门外。
+    """
+    if not password:
+        return ""
+    digest = hashlib.sha256(password.encode("utf-8")).hexdigest()
+    return f"{base_secret}:{digest}"
+
+
 def make_auth_cookie(secret, now=None, ttl=7 * 24 * 3600):
     expires = int((time.time() if now is None else now) + ttl)
     return f"{expires}.{_sign(secret, expires)}"
@@ -1267,7 +1278,7 @@ def main(argv=None):
     password = resolve_password(config_path, os.environ.get("ROAD_CHAT_PASSWORD"), DEPLOY_CONFIG)
     max_visitors = resolve_max_visitors(config_path, os.environ.get("ROAD_CHAT_MAX_VISITORS"), DEPLOY_CONFIG)
     Handler.password = password
-    Handler.secret = auth_secret(root) if password else ""
+    Handler.secret = cookie_secret(auth_secret(root), password) if password else ""
     service = ChatService(root, read_api_key(root), max_visitors=max_visitors)
     idle_seconds = int(os.environ.get("ROAD_CHAT_IDLE_SECONDS", "1800") or 0)
     service.start_reaper(idle_seconds)

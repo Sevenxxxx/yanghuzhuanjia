@@ -225,6 +225,17 @@ class AuthCookieTests(unittest.TestCase):
     def test_signature_change_tracks_expiry(self):
         self.assertNotEqual(app._sign("secret", 1), app._sign("secret", 2))
 
+    def test_password_change_invalidates_old_cookies(self):
+        old = app.cookie_secret("base", "old-pass")
+        new = app.cookie_secret("base", "new-pass")
+        self.assertNotEqual(old, new)
+        cookie = app.make_auth_cookie(old, now=1000)
+        self.assertTrue(app.check_auth_cookie(cookie, old, now=1001))
+        self.assertFalse(app.check_auth_cookie(cookie, new, now=1001))
+
+    def test_cookie_secret_empty_without_password(self):
+        self.assertEqual(app.cookie_secret("base", ""), "")
+
 
 class FakeRuntime:
     def __init__(self):

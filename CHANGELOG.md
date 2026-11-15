@@ -3,6 +3,12 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.16（2026-11-15）
+
+- 改口令即生效：`rc_auth` cookie 的签名密钥改为「`auth.key` + 当前口令派生值」，改 `deploy.json`
+  的 `password` 并重启后，所有旧 cookie 立刻失效，已登录的浏览器被要求重新输口令。
+- 以前 cookie 只与 `auth.key` 有关、7 天有效：换口令后旧浏览器仍能免密用上一周，等于换口令没把人挡在门外。
+
 ## 0.4.15（2026-11-15）
 
 - 部署配置改为**启动时直接读 `deploy.json`**：`max_visitors` 与 `password` 以它为准，优先级高于
