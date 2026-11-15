@@ -371,6 +371,7 @@ Caddy 会自动完成 ACME 签发，之后同事改用 `https://你的域名/`�
 | 规范检索失败 | `%USERPROFILE%\Desktop\guifanchaxun\tools\guifan-chaxun\config.json` | 第 7 步的两个路径没改 |
 | 提示 `dsh` 需要更高 Node | `node -v` | 必须 ≥ 24.9；重跑 bootstrap |
 | 8443 证书告警 | 只有 `https: true` 时才有 | 自签证书的正常提示；域名证书生效后消失 |
+| 改了 `http_port` 后打不开 | 控制台防火墙 + `acceptance.ps1` | 新端口要同时在控制台和 Windows 防火墙放行 |
 | 8443 打不开但任务显示 Running | `C:\road\caddy\caddy.exe validate --config C:\road\caddy\Caddyfile` | 端口被占、Caddyfile 写坏；也可以在控制台手动 `caddy run` 看报错 |
 
 看日志：

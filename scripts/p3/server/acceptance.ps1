@@ -21,6 +21,7 @@ if (Test-Path $ConfigPath) {
     if ($Deploy.paths.app) { $AppDir = [Environment]::ExpandEnvironmentVariables($Deploy.paths.app) }
     if ($Deploy.paths.work) { $WorkDir = [Environment]::ExpandEnvironmentVariables($Deploy.paths.work) }
     if ($Deploy.paths.etc) { $EtcDir = [Environment]::ExpandEnvironmentVariables($Deploy.paths.etc) }
+    if ($Deploy.http_port) { $HttpPort = [int]$Deploy.http_port }
 }
 $script:pass = 0
 $script:fail = 0
@@ -97,8 +98,8 @@ Check '真实 key 不在前端 env' {
 Check '日志里没有 key' {
     -not (Select-String -Path 'C:\road\logs\*.log' -Pattern 'sk-[A-Za-z0-9]{20,}' -ErrorAction SilentlyContinue)
 }
-Check '防火墙已放行 8443' {
-    [bool](Get-NetFirewallRule -DisplayName '*8443*' -ErrorAction SilentlyContinue)
+Check "防火墙已放行 $HttpPort" {
+    [bool](Get-NetFirewallRule -DisplayName "*$HttpPort*" -ErrorAction SilentlyContinue)
 }
 
 Write-Host ''
