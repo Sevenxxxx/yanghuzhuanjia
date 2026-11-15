@@ -3,6 +3,13 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.7（2026-11-15）
+
+- 修复 `install-chat.ps1` 注册 `RoadChat` 计划任务时报 `AmbiguousParameterSet`：
+  `Register-ScheduledTask` 的 `-Principal` 与 `-User/-Password` 属于不同参数集，不能同时传。
+- 补服务账户的读权限：`roadchat` 需要读 `C:\road\etc` 的配置与 `C:\road\bin` 的启动脚本，
+  否则计划任务启动后读不到 env、拿不到配置（`proxy.env` 仍只给管理员/SYSTEM）。
+
 ## 0.4.6（2026-11-15）
 
 - `bootstrap-windows.ps1` 的 Defender 排除增加**规范库目录**（`Desktop\guifanchaxun`），

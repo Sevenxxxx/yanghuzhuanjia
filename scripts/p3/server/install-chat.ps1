@@ -133,7 +133,19 @@ Set-Content -Path (Join-Path $EtcDir 'proxy.patch.yml') -Encoding utf8 -Value @(
 # 用 SID 而不是本地化组名，中文版 Windows 也不会失配
 icacls (Join-Path $EtcDir 'proxy.env') /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null
 
-Step '权限：服务账户可读仓库与规范库'
+Step '权限：服务账户可读配置、启动脚本、仓库与规范库'
+# 服务以 roadchat 身份启动：要能读配置文件与启动脚本，读得到仓库与规范库
+icacls $EtcDir /grant "${ServiceUser}:(OI)(CI)RX" | Out-Null
+foreach ($configFile in @('config.json', 'roadchat.env', 'proxy.patch.yml')) {
+    $configPath = Join-Path $EtcDir $configFile
+    if (Test-Path $configPath) {
+        icacls $configPath /grant "${ServiceUser}:RX" | Out-Null
+    }
+}
+# proxy.env 的 ACL 已在上面收紧（仅 Administrators/SYSTEM），这里不碰它
+$binDir = 'C:\road\bin'
+if (Test-Path $binDir) { icacls $binDir /grant "${ServiceUser}:(OI)(CI)RX" /T | Out-Null }
+
 foreach ($readonlyDir in @($AppDir, $SpecDir)) {
     if (-not (Test-Path $readonlyDir)) { continue }
     icacls $readonlyDir /grant "${ServiceUser}:(OI)(CI)RX" | Out-Null
@@ -168,9 +180,9 @@ function Register-LongRunning([string]$name, [string]$script, [string]$user, [st
     $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable
     if ($password) {
-        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Password -RunLevel Limited
+        # 用 -User/-Password 就不能再传 -Principal，两者属于不同参数集
         Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings `
-            -Principal $principal -User $user -Password $password | Out-Null
+            -User $user -Password $password | Out-Null
     } else {
         $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
         Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings `
