@@ -88,6 +88,10 @@ foreach ($task in @('RoadChat', 'RoadModelProxy', 'RoadCaddy')) {
         (Get-ScheduledTask -TaskName $task -ErrorAction Stop).State -in @('Running', 'Ready')
     }
 }
+Check '看门狗已注册（每 5 分钟拉起聊天服务）' {
+    $task = Get-ScheduledTask -TaskName 'RoadChatWatchdog' -ErrorAction Stop
+    $task.State -ne 'Disabled'
+}
 
 Write-Host '== 4. 权限与密钥 ==' -ForegroundColor Cyan
 Check '服务账户能初始化 dsh（realpath 不报 EPERM）' {

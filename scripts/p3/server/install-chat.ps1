@@ -204,7 +204,15 @@ try {
         if (`$_ -match '^\s*([^#=]+)=(.*)$') { [Environment]::SetEnvironmentVariable(`$matches[1].Trim(), `$matches[2].Trim(), 'Process') }
     }
     Set-Location '$AppDir'
-    & python -X utf8 '$AppDir\scripts\p3\chat\app.py' --host 127.0.0.1 --port $ChatPort --home '$WorkDir' *>> `$log
+    `$env:PYTHONUNBUFFERED = '1'
+    # 分开写 stdout/stderr：以前混写进同一个文件，崩溃时的 traceback 会被编码搅乱，查不出原因
+    `$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    `$outLog = Join-Path `$logDir "chat-`$stamp.out.log"
+    `$errLog = Join-Path `$logDir "chat-`$stamp.err.log"
+    "输出：`$outLog`n错误：`$errLog" | Out-File `$log -Append -Encoding utf8
+    `$proc = Start-Process -FilePath 'python' -ArgumentList @('-X', 'utf8', '$AppDir\scripts\p3\chat\app.py', '--host', '127.0.0.1', '--port', '$ChatPort', '--home', '$WorkDir') -NoNewWindow -Wait -PassThru -RedirectStandardOutput `$outLog -RedirectStandardError `$errLog
+    "退出码：`$(`$proc.ExitCode)" | Out-File `$log -Append -Encoding utf8
+    exit `$proc.ExitCode
 } catch {
     `$_ | Out-File `$log -Append -Encoding utf8
     exit 1
@@ -271,6 +279,28 @@ function Register-LongRunning([string]$name, [string]$script, [string]$user, [st
 Register-LongRunning 'RoadModelProxy' 'C:\road\bin\run-proxy.ps1' '' ''
 Grant-BatchLogon "$env:COMPUTERNAME\$ServiceUser"
 Register-LongRunning 'RoadChat' 'C:\road\bin\run-chat.ps1' $ServiceUser $servicePassword
+
+Step '看门狗'
+# 计划任务的「失败自动重启」在进程被外部杀掉时不一定会触发；2026-11-18 聊天进程退出后
+# 任务停在 Ready、Caddy 一直 502，就是没人把它拉起来。这里每 5 分钟看一次 health。
+Set-Content -Path 'C:\road\bin\watch-chat.ps1' -Encoding utf8 -Value @"
+`$log = 'C:\road\work\logs\watchdog.log'
+try {
+    `$h = Invoke-RestMethod 'http://127.0.0.1:$ChatPort/api/health' -TimeoutSec 5
+    if (`$h.ok) { exit 0 }
+} catch { }
+"`$(Get-Date -Format o) 聊天服务不健康，重启 RoadChat" | Out-File `$log -Append -Encoding utf8
+Stop-ScheduledTask -TaskName RoadChat -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+Start-ScheduledTask -TaskName RoadChat
+"@
+& schtasks /Create /TN 'RoadChatWatchdog' /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\road\bin\watch-chat.ps1" `
+    /SC MINUTE /MO 5 /RU SYSTEM /RL HIGHEST /F *> $null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "看门狗注册失败（schtasks 退出码 $LASTEXITCODE）" -ForegroundColor DarkYellow
+} else {
+    Write-Host '已注册 RoadChatWatchdog：每 5 分钟检查一次 health，不健康就重启聊天服务'
+}
 
 Step 'Caddy 反向代理'
 $caddyDir = 'C:\road\caddy'

@@ -3,6 +3,15 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.17（2026-11-19）
+
+- 修「服务挂了没人拉起」：新增 `RoadChatWatchdog` 计划任务，每 5 分钟查一次 `/api/health`，
+  不健康就重启 `RoadChat`。2026-11-18 02:49 聊天进程退出后，任务停在 `Ready`、`RoadCaddy` 一直 502，
+  页面登录不了却没人发现——计划任务的「失败自动重启」在进程被外部终止时没有触发。
+- `run-chat.ps1` 改为 stdout／stderr 分开写 `chat-<时间戳>.out.log` / `.err.log`，并在 `chat-run.log`
+  记退出码：以前两路混写同一文件，崩溃 traceback 被编码搅乱，查不出原因。
+- `acceptance.ps1` 增加「看门狗已注册」检查。
+
 ## 0.4.16（2026-11-15）
 
 - 改口令即生效：`rc_auth` cookie 的签名密钥改为「`auth.key` + 当前口令派生值」，改 `deploy.json`

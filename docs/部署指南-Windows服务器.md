@@ -488,6 +488,10 @@ Restart-Computer -Force
 **换口令**：改 `deploy.json` 的 `password`，然后 `.\service.ps1 restart`。口令一换，所有已登录的
 浏览器（包括正在用的页面）立刻失效、需要重新输口令——旧会话的 cookie 与当前口令绑定，不是等 7 天到期。
 
+**看门狗**：除三个主任务外还有一个 `RoadChatWatchdog`，每 5 分钟查一次 `/api/health`，不健康就重启
+`RoadChat`，动作记在 `C:\road\work\logs\watchdog.log`。聊天进程每次启动会单独写
+`chat-<时间戳>.out.log` / `.err.log`，下次崩溃先看 `.err.log` 里的 traceback。
+
 **日常**：三个任务开机自启、失败每分钟重试，一般不用管。每周看一眼 `C:\road\work` 占用
 （会话数据会增长；不想要就停任务后删掉对应 visitor 目录）。
 

@@ -2,6 +2,26 @@
 
 本文件集中维护有日期的验证和历史处理记录；最新复验置于最前。旧路径、旧测试数量和历史人工查看不能作为新版本验证。运行命令与接手入口见 [交接.md](交接.md)。
 
+## 2026-11-19：0.4.17 聊天服务退出后无人拉起（登录不了）
+
+用户报「登录不了养护助手」。现场：`RoadCaddy`、`RoadModelProxy` 一直在跑，`RoadChat` 停在 `Ready`，
+8095 无监听，8443 返回 502，`/api/health` 连不上。
+
+| 检查 | 结果 |
+|---|---|
+| 时间线 | `RoadChat` 11-15 20:13:12 启动，日志最后写入 11-18 02:49；任务上次运行时间仍是 11-15 20:13，结果 `0x1` |
+| 为什么没自愈 | 任务设了「失败重启 999 次 / 1 分钟」，但进程被外部终止后没有触发；也没有别的看门狗 |
+| 崩溃原因 | 没有 Application 崩溃事件（1000/1001 无 python 记录）；旧日志把 stdout/stderr 混写在一个文件里，编码混乱，读不出 traceback——**根因未确定** |
+| 立即恢复 | 手动 `Start-ScheduledTask RoadChat`，health 正常；`deploy.json` 的口令经 8443 登录返回 200 |
+| 修复 1 | 新增 `RoadChatWatchdog`（schtasks，每 5 分钟、SYSTEM）：health 不健康就停启 `RoadChat`，写 `logs\watchdog.log` |
+| 修复 2 | `run-chat.ps1` 改为 `Start-Process -RedirectStandardOutput/-RedirectStandardError`，每次启动写独立的 `chat-<时间戳>.out.log` / `.err.log`，并在 `chat-run.log` 记退出码与日志路径 |
+| 看门狗实测 | 停掉 `RoadChat` → health 失败 → 跑 `watch-chat.ps1` → 服务自动恢复、`watchdog.log` 记一行；服务健康时再跑直接退出、不重启 |
+| 门槛 | `acceptance.ps1` 16 项全部通过（新增「看门狗已注册」） |
+| 未修的风险 | 本机总内存 4GB，`max_visitors` 现为 8，每个在线运行时约 200–300MB；并发拉满时内存压力可能正是进程退出的诱因。下次复现可用新的 `.err.log` 定位 |
+
+未验证：崩溃根因（等下次复现看 `.err.log`）；内存压力与崩溃的因果关系。若长时间稳定，可把 `max_visitors`
+降到 2–3 以贴合 4GB 内存。
+
 ## 2026-11-15：0.4.16 换口令后旧会话失效
 
 用户问「改 `deploy.json` 的密码后，已登录的人会被要求重新输入吗」。查代码：`rc_auth` cookie 只由
