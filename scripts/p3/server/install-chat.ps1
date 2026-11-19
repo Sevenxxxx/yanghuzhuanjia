@@ -284,7 +284,7 @@ Register-LongRunning 'RoadChat' 'C:\road\bin\run-chat.ps1' $ServiceUser $service
 
 Step '看门狗'
 # 计划任务的「失败自动重启」在进程被外部杀掉时不一定会触发；2026-11-18 聊天进程退出后
-# 任务停在 Ready、Caddy 一直 502，就是没人把它拉起来。这里每 5 分钟看一次 health。
+# 任务停在 Ready、Caddy 一直 502，就是没人把它拉起来。这里每 60 分钟看一次 health。
 Set-Content -Path 'C:\road\bin\watch-chat.ps1' -Encoding utf8 -Value @"
 `$log = 'C:\road\work\logs\watchdog.log'
 try {
@@ -297,11 +297,11 @@ Start-Sleep -Seconds 2
 Start-ScheduledTask -TaskName RoadChat
 "@
 & schtasks /Create /TN 'RoadChatWatchdog' /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\road\bin\watch-chat.ps1" `
-    /SC MINUTE /MO 5 /RU SYSTEM /RL HIGHEST /F *> $null
+    /SC MINUTE /MO 60 /RU SYSTEM /RL HIGHEST /F *> $null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "看门狗注册失败（schtasks 退出码 $LASTEXITCODE）" -ForegroundColor DarkYellow
 } else {
-    Write-Host '已注册 RoadChatWatchdog：每 5 分钟检查一次 health，不健康就重启聊天服务'
+    Write-Host '已注册 RoadChatWatchdog：每 60 分钟检查一次 health，不健康就重启聊天服务'
 }
 
 Step 'Caddy 反向代理'

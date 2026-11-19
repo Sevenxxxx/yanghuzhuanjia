@@ -3,6 +3,11 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.19（2026-11-19）
+
+- 看门狗 `RoadChatWatchdog` 的检查间隔由 5 分钟改为 **60 分钟**（`schtasks /MO 60`）；
+  代价是进程退出后最长要等一小时才会被自动拉起。
+
 ## 0.4.18（2026-11-19）
 
 - 聊天进程开启 `PYTHONFAULTHANDLER`：原生级崩溃（访问冲突等）也会在 `.err.log` 留下 traceback，
