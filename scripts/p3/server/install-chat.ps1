@@ -205,13 +205,15 @@ try {
     }
     Set-Location '$AppDir'
     `$env:PYTHONUNBUFFERED = '1'
+    # 原生级崩溃（访问冲突等）默认不打印 traceback；打开 faulthandler 让 .err.log 留下现场
+    `$env:PYTHONFAULTHANDLER = '1'
     # 分开写 stdout/stderr：以前混写进同一个文件，崩溃时的 traceback 会被编码搅乱，查不出原因
     `$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     `$outLog = Join-Path `$logDir "chat-`$stamp.out.log"
     `$errLog = Join-Path `$logDir "chat-`$stamp.err.log"
     "输出：`$outLog`n错误：`$errLog" | Out-File `$log -Append -Encoding utf8
     `$proc = Start-Process -FilePath 'python' -ArgumentList @('-X', 'utf8', '$AppDir\scripts\p3\chat\app.py', '--host', '127.0.0.1', '--port', '$ChatPort', '--home', '$WorkDir') -NoNewWindow -Wait -PassThru -RedirectStandardOutput `$outLog -RedirectStandardError `$errLog
-    "退出码：`$(`$proc.ExitCode)" | Out-File `$log -Append -Encoding utf8
+    "退出码：`$(`$proc.ExitCode) 时间：`$(Get-Date -Format o)" | Out-File `$log -Append -Encoding utf8
     exit `$proc.ExitCode
 } catch {
     `$_ | Out-File `$log -Append -Encoding utf8

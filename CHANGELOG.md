@@ -3,6 +3,12 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.18（2026-11-19）
+
+- 聊天进程开启 `PYTHONFAULTHANDLER`：原生级崩溃（访问冲突等）也会在 `.err.log` 留下 traceback，
+  补上 11-18 那次「只有一行分隔线、没有异常栈」的取证空白。
+- `chat-run.log` 的退出行同时记退出码与时间，便于把「进程什么时候死的」和看门狗日志对齐。
+
 ## 0.4.17（2026-11-19）
 
 - 修「服务挂了没人拉起」：新增 `RoadChatWatchdog` 计划任务，每 5 分钟查一次 `/api/health`，
