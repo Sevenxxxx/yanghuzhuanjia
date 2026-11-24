@@ -527,10 +527,10 @@ class TraceTests(unittest.TestCase):
 
 class StateFileTests(unittest.TestCase):
     def test_marker_sits_beside_home(self):
-        path = app.state_path(Path("C:/work/dsh-roads/home"))
+        path = app.state_path(Path("C:/work/dsh-roads"))
         self.assertEqual(path.name, "chat-url.txt")
         self.assertEqual(path.parent.name, "dsh-roads")
-        self.assertFalse(str(path).startswith(str(Path("C:/work/dsh-roads/home"))))
+        self.assertEqual(str(path), str(Path("C:/work/dsh-roads/chat-url.txt")))
 
 
 if __name__ == "__main__":

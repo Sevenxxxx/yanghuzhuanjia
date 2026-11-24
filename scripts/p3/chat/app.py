@@ -394,9 +394,9 @@ class DshRuntime:
 
 # ---------------------------------------------------------------- profile 与配置
 
-def state_path(home):
-    """启动脚本用来拿当前地址的小文件；放在 home 旁边，不进仓库。"""
-    return Path(home).parent / "chat-url.txt"
+def state_path(root):
+    """启动脚本用来拿当前地址的小文件；放在数据根目录里，与启动脚本的查找路径一致。"""
+    return Path(root) / "chat-url.txt"
 
 
 def ensure_profile(home, log=print):

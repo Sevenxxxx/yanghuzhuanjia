@@ -3,6 +3,12 @@
 版本号以 `src/roadexpert/__init__.py` 为准；详细验证记录见 [docs/validation.md](docs/validation.md)。
 
 
+## 0.4.20（2026-11-24）
+
+- 修启动脚本（`启动咨询助手.cmd`）找不到运行中服务：地址标记文件写到 `%USERPROFILE%\chat-url.txt`，
+  而启动脚本读的是 `%USERPROFILE%\dsh-roads\chat-url.txt`。现在统一写到数据根目录内，
+  启动脚本能复用它判断「已在运行」并直接打开页面。
+
 ## 0.4.19（2026-11-19）
 
 - 看门狗 `RoadChatWatchdog` 的检查间隔由 5 分钟改为 **60 分钟**（`schtasks /MO 60`）；
